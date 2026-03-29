@@ -2,8 +2,9 @@
 Repository for ECEN-5593 final project. Will implement page table flattening in the linux kernel. 
 
 ## Setup
-You will need QEMU installed to use this repository. Also, you will need to unzip the kernel using this command: 
+You will need QEMU installed to use this repository. Also, you will need to acquire a linux kernel! We are using 6.15, from the commands below. If you use a different version or get one from a different source, then you will need to edit either directory names or the `run.sh` file.
 ```
+wget https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/snapshot/linux-6.15.tar.gz
 tar -xzf linux-6.15.tar.gz
 ```
 ## Kernel Recompilation Steps
