@@ -29,7 +29,3 @@ cp ./initramfs.cpio.gz ./../
 ```
 
 Technically, you should only need the zip file, but the file system isnt too big, so I included it here so that we don't have to rebuild it from scratch if we need to modify it.
-
-to do:
-gitignore ??
-make readme pretty 
