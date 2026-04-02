@@ -1148,7 +1148,7 @@ static int ptwalk_summary_show(struct seq_file *m, void *v)
 	// mmap_read_unlock(mm);
 
 	seq_printf(m,
-		   "PT WALK SUMMARY: FULL-MM pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu",
+		   "PT WALK SUMMARY: FULL-MM pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu\n",
 		   summary_stats.pgd_count,
 		   summary_stats.p4d_count,
 		   summary_stats.pud_count,
@@ -1184,6 +1184,16 @@ static int ptwalk_summary_show(struct seq_file *m, void *v)
 	return 0;
 }
 
+static int ptwalk_reset(struct seq_file *m, void *v)
+{
+	summary_stats.pgd_count = 0;
+	summary_stats.p4d_count = 0;
+	summary_stats.pud_count = 0;
+	summary_stats.pmd_count = 0;
+	summary_stats.pte_count = 0;
+	return 0;
+}
+
 static int __init ptwalk_summary_init(void)
 {
 	if (!proc_create_single("ptwalk_summary", 0444, NULL,
@@ -1193,5 +1203,18 @@ static int __init ptwalk_summary_init(void)
 	return 0;
 }
 
+
+
+
+
+static int __init ptwalk_reset_init(void)
+{
+	if (!proc_create_single("ptwalk_reset", 0444, NULL,
+				ptwalk_reset))
+		return -ENOMEM;
+
+	return 0;
+}
 late_initcall(ptwalk_summary_init);
+late_initcall(ptwalk_reset_init);
 
