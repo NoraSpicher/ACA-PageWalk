@@ -87,7 +87,7 @@ static int ptwalk_dbg_pte_entry(pte_t *pte, unsigned long addr,
 
 
 
-const struct mm_walk_ops summary_ops = {
+struct mm_walk_ops summary_ops = {
 		.pgd_entry = ptwalk_dbg_pgd_entry,
 		.p4d_entry = ptwalk_dbg_p4d_entry,
 		.pud_entry = ptwalk_dbg_pud_entry,
@@ -559,7 +559,7 @@ int walk_page_range_mm(struct mm_struct *mm, unsigned long start,
 	unsigned long next;
 	struct vm_area_struct *vma;
 	struct mm_walk walk = {
-		.ops		= summary_ops,
+		.ops		= &summary_ops,
 		.mm		= mm,
 		.private	= private,
 	};
@@ -769,7 +769,7 @@ int walk_page_range_vma(struct vm_area_struct *vma, unsigned long start,
 {
 
 	struct mm_walk walk = {
-		.ops		= summary_ops,
+		.ops		= &summary_ops,
 		.mm		= vma->vm_mm,
 		.vma		= vma,
 		.private	= private,
@@ -791,7 +791,7 @@ int walk_page_vma(struct vm_area_struct *vma, const struct mm_walk_ops *ops,
 		void *private)
 {
 	struct mm_walk walk = {
-		.ops		= summary_ops,
+		.ops		= &summary_ops,
 		.mm		= vma->vm_mm,
 		.vma		= vma,
 		.private	= private,
@@ -842,7 +842,7 @@ int walk_page_mapping(struct address_space *mapping, pgoff_t first_index,
 		      void *private)
 {
 	struct mm_walk walk = {
-		.ops		= summary_ops,
+		.ops		= &summary_ops,
 		.private	= private,
 	};
 	struct vm_area_struct *vma;
@@ -1106,9 +1106,9 @@ static int ptwalk_summary_show(struct seq_file *m, void *v)
 {
 	//struct mm_struct *mm = current->mm;
 	//struct vm_area_struct *vma;
-	struct ptwalk_debug_stats stats = {0};
-	unsigned long start, end;
-	int err;
+	// struct ptwalk_debug_stats stats = {0};
+	// unsigned long start, end;
+	//int err;
 
 	// const struct mm_walk_ops ops = {
 	// 	.pgd_entry = ptwalk_dbg_pgd_entry,
@@ -1145,16 +1145,16 @@ static int ptwalk_summary_show(struct seq_file *m, void *v)
 	// 	}
 	// }
 
-	mmap_read_unlock(mm);
+	// mmap_read_unlock(mm);
 
 	seq_printf(m,
-		   "PT WALK SUMMARY: FULL-MM pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu err=%d\n",
-		   stats.pgd_count,
-		   stats.p4d_count,
-		   stats.pud_count,
-		   stats.pmd_count,
-		   stats.pte_count,
-		   err);
+		   "PT WALK SUMMARY: FULL-MM pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu",
+		   summary_stats.pgd_count,
+		   summary_stats.p4d_count,
+		   summary_stats.pud_count,
+		   summary_stats.pmd_count,
+		   summary_stats.pte_count);
+		   //err);
 
 	// vma = find_vma(mm, 0);
 	// if (!vma) {
