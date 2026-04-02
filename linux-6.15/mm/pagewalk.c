@@ -24,6 +24,80 @@
  * folding of levels which may be happening. For example if p4d is folded then
  * a missing entry found at level 1 (p4d) is actually at level 0 (pgd).
  */
+
+  struct ptwalk_debug_stats {
+	unsigned long pgd_count;
+	unsigned long p4d_count;
+	unsigned long pud_count;
+	unsigned long pmd_count;
+	unsigned long pte_count;
+};
+struct ptwalk_debug_stats summary_stats = {0};
+
+ static int ptwalk_dbg_pgd_entry(pgd_t *pgd, unsigned long addr,
+				unsigned long next, struct mm_walk *walk)
+{
+	//struct ptwalk_debug_stats *stats = walk->private;
+
+	//stats->pgd_count++;
+	summary_stats.pgd_count++;
+	return 0;
+}
+
+static int ptwalk_dbg_p4d_entry(p4d_t *p4d, unsigned long addr,
+				unsigned long next, struct mm_walk *walk)
+{
+	//struct ptwalk_debug_stats *stats = walk->private;
+
+	//stats->p4d_count++;
+	summary_stats.p4d_count++;
+	return 0;
+}
+
+static int ptwalk_dbg_pud_entry(pud_t *pud, unsigned long addr,
+				unsigned long next, struct mm_walk *walk)
+{
+	//struct ptwalk_debug_stats *stats = walk->private;
+
+	//stats->pud_count++;
+	summary_stats.pud_count++;
+	return 0;
+}
+
+static int ptwalk_dbg_pmd_entry(pmd_t *pmd, unsigned long addr,
+				unsigned long next, struct mm_walk *walk)
+{
+	//struct ptwalk_debug_stats *stats = walk->private;
+
+	//stats->pmd_count++;
+	summary_stats.pmd_count++;
+	return 0;
+}
+
+static int ptwalk_dbg_pte_entry(pte_t *pte, unsigned long addr,
+				unsigned long next, struct mm_walk *walk)
+{
+	//struct ptwalk_debug_stats *stats = walk->private;
+
+	//stats->pte_count++;
+	summary_stats.pte_count++;
+	return 0;
+}
+
+
+
+
+const struct mm_walk_ops summary_ops = {
+		.pgd_entry = ptwalk_dbg_pgd_entry,
+		.p4d_entry = ptwalk_dbg_p4d_entry,
+		.pud_entry = ptwalk_dbg_pud_entry,
+		.pmd_entry = ptwalk_dbg_pmd_entry,
+		.pte_entry = ptwalk_dbg_pte_entry,
+		.walk_lock = PGWALK_RDLOCK,
+	};
+
+
+ 
 static int real_depth(int depth)
 {
 	if (depth == 3 && PTRS_PER_PMD == 1)
@@ -485,7 +559,7 @@ int walk_page_range_mm(struct mm_struct *mm, unsigned long start,
 	unsigned long next;
 	struct vm_area_struct *vma;
 	struct mm_walk walk = {
-		.ops		= ops,
+		.ops		= summary_ops,
 		.mm		= mm,
 		.private	= private,
 	};
@@ -695,7 +769,7 @@ int walk_page_range_vma(struct vm_area_struct *vma, unsigned long start,
 {
 
 	struct mm_walk walk = {
-		.ops		= ops,
+		.ops		= summary_ops,
 		.mm		= vma->vm_mm,
 		.vma		= vma,
 		.private	= private,
@@ -717,7 +791,7 @@ int walk_page_vma(struct vm_area_struct *vma, const struct mm_walk_ops *ops,
 		void *private)
 {
 	struct mm_walk walk = {
-		.ops		= ops,
+		.ops		= summary_ops,
 		.mm		= vma->vm_mm,
 		.vma		= vma,
 		.private	= private,
@@ -768,7 +842,7 @@ int walk_page_mapping(struct address_space *mapping, pgoff_t first_index,
 		      void *private)
 {
 	struct mm_walk walk = {
-		.ops		= ops,
+		.ops		= summary_ops,
 		.private	= private,
 	};
 	struct vm_area_struct *vma;
@@ -1021,101 +1095,55 @@ found:
 
 
 // Added structures:
-struct ptwalk_debug_stats {
-	unsigned long pgd_count;
-	unsigned long p4d_count;
-	unsigned long pud_count;
-	unsigned long pmd_count;
-	unsigned long pte_count;
-};
 
-static int ptwalk_dbg_pgd_entry(pgd_t *pgd, unsigned long addr,
-				unsigned long next, struct mm_walk *walk)
-{
-	struct ptwalk_debug_stats *stats = walk->private;
 
-	stats->pgd_count++;
-	return 0;
-}
 
-static int ptwalk_dbg_p4d_entry(p4d_t *p4d, unsigned long addr,
-				unsigned long next, struct mm_walk *walk)
-{
-	struct ptwalk_debug_stats *stats = walk->private;
 
-	stats->p4d_count++;
-	return 0;
-}
 
-static int ptwalk_dbg_pud_entry(pud_t *pud, unsigned long addr,
-				unsigned long next, struct mm_walk *walk)
-{
-	struct ptwalk_debug_stats *stats = walk->private;
 
-	stats->pud_count++;
-	return 0;
-}
-
-static int ptwalk_dbg_pmd_entry(pmd_t *pmd, unsigned long addr,
-				unsigned long next, struct mm_walk *walk)
-{
-	struct ptwalk_debug_stats *stats = walk->private;
-
-	stats->pmd_count++;
-	return 0;
-}
-
-static int ptwalk_dbg_pte_entry(pte_t *pte, unsigned long addr,
-				unsigned long next, struct mm_walk *walk)
-{
-	struct ptwalk_debug_stats *stats = walk->private;
-
-	stats->pte_count++;
-	return 0;
-}
 
 static int ptwalk_summary_show(struct seq_file *m, void *v)
 {
-	struct mm_struct *mm = current->mm;
-	struct vm_area_struct *vma;
+	//struct mm_struct *mm = current->mm;
+	//struct vm_area_struct *vma;
 	struct ptwalk_debug_stats stats = {0};
 	unsigned long start, end;
 	int err;
 
-	const struct mm_walk_ops ops = {
-		.pgd_entry = ptwalk_dbg_pgd_entry,
-		.p4d_entry = ptwalk_dbg_p4d_entry,
-		.pud_entry = ptwalk_dbg_pud_entry,
-		.pmd_entry = ptwalk_dbg_pmd_entry,
-		.pte_entry = ptwalk_dbg_pte_entry,
-		.walk_lock = PGWALK_RDLOCK,
-	};
+	// const struct mm_walk_ops ops = {
+	// 	.pgd_entry = ptwalk_dbg_pgd_entry,
+	// 	.p4d_entry = ptwalk_dbg_p4d_entry,
+	// 	.pud_entry = ptwalk_dbg_pud_entry,
+	// 	.pmd_entry = ptwalk_dbg_pmd_entry,
+	// 	.pte_entry = ptwalk_dbg_pte_entry,
+	// 	.walk_lock = PGWALK_RDLOCK,
+	// };
 
-	if (!mm) {
-		seq_puts(m, "PT WALK SUMMARY: no current mm\n");
-		return 0;
-	}
+	// if (!mm) {
+	// 	seq_puts(m, "PT WALK SUMMARY: no current mm\n");
+	// 	return 0;
+	// }
 
-	mmap_read_lock(mm);
+	// mmap_read_lock(mm);
 
-	start = 0;
-	end = 0;
-	err = 0;
+	// start = 0;
+	// end = 0;
+	// err = 0;
 
-	{
-		VMA_ITERATOR(vmi, mm, 0);
+	// {
+	// 	VMA_ITERATOR(vmi, mm, 0);
 
-		for_each_vma(vmi, vma) {
-			int walk_err;
+	// 	for_each_vma(vmi, vma) {
+	// 		int walk_err;
 
-			start = vma->vm_start;
-			end = vma->vm_end;
+	// 		start = vma->vm_start;
+	// 		end = vma->vm_end;
 
-			walk_err = walk_page_range(mm, start, end, &ops, &stats);
-			if (walk_err && !err)
-				err = walk_err;
-		}
-	}
+	// 		walk_err = walk_page_range(mm, start, end, &ops, &stats);
+	// 		if (walk_err && !err)
+	// 			err = walk_err;
+	// 	}
+	// }
 
 	mmap_read_unlock(mm);
 
