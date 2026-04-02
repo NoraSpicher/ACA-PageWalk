@@ -16,6 +16,7 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 
+#include <linux/mm.h>
 
 
 /*
@@ -692,7 +693,7 @@ int walk_page_range_vma(struct vm_area_struct *vma, unsigned long start,
 			unsigned long end, const struct mm_walk_ops *ops,
 			void *private)
 {
-	
+
 	struct mm_walk walk = {
 		.ops		= ops,
 		.mm		= vma->vm_mm,
@@ -1097,30 +1098,60 @@ static int ptwalk_summary_show(struct seq_file *m, void *v)
 
 	mmap_read_lock(mm);
 
-	vma = find_vma(mm, 0);
-	if (!vma) {
-		mmap_read_unlock(mm);
-		seq_puts(m, "PT WALK SUMMARY: no VMA found\n");
-		return 0;
+	start = 0;
+	end = 0;
+	err = 0;
+
+	{
+		VMA_ITERATOR(vmi, mm, 0);
+
+		for_each_vma(vmi, vma) {
+			int walk_err;
+
+			start = vma->vm_start;
+			end = vma->vm_end;
+
+			walk_err = walk_page_range(mm, start, end, &ops, &stats);
+			if (walk_err && !err)
+				err = walk_err;
+		}
 	}
-
-	start = vma->vm_start;
-	end = min(vma->vm_end, start + (2UL << 20));
-	//end = 2UL << 20;
-
-	err = walk_page_range(mm, start, end, &ops, &stats);
 
 	mmap_read_unlock(mm);
 
 	seq_printf(m,
-		   "PT WALK SUMMARY: start=%lx end=%lx pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu err=%d\n",
-		   start, end,
+		   "PT WALK SUMMARY: FULL-MM pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu err=%d\n",
 		   stats.pgd_count,
 		   stats.p4d_count,
 		   stats.pud_count,
 		   stats.pmd_count,
 		   stats.pte_count,
 		   err);
+
+	// vma = find_vma(mm, 0);
+	// if (!vma) {
+	// 	mmap_read_unlock(mm);
+	// 	seq_puts(m, "PT WALK SUMMARY: no VMA found\n");
+	// 	return 0;
+	// }
+
+	// start = vma->vm_start;
+	// end = min(vma->vm_end, start + (2UL << 20));
+	// //end = 2UL << 20;
+
+	// err = walk_page_range(mm, start, end, &ops, &stats);
+
+	// mmap_read_unlock(mm);
+
+	// seq_printf(m,
+	// 	   "PT WALK SUMMARY: start=%lx end=%lx pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu err=%d\n",
+	// 	   start, end,
+	// 	   stats.pgd_count,
+	// 	   stats.p4d_count,
+	// 	   stats.pud_count,
+	// 	   stats.pmd_count,
+	// 	   stats.pte_count,
+	// 	   err);
 
 	return 0;
 }
