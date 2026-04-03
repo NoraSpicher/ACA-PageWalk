@@ -299,6 +299,39 @@ static inline bool p4d_leaf(p4d_t p4d)
 	return 0;
 }
 
+
+//Added flattened bit helper functions 
+static inline bool pgd_next_is_flattened(pgd_t pgd)
+{
+    return !!(pgd_val(pgd) & _PAGE_FLAT_NEXT);
+}
+
+static inline pgd_t pgd_mk_next_flattened(pgd_t pgd)
+{
+    return __pgd(pgd_val(pgd) | _PAGE_FLAT_NEXT);
+}
+
+static inline pgd_t pgd_clear_next_flattened(pgd_t pgd)
+{
+    return __pgd(pgd_val(pgd) & ~_PAGE_FLAT_NEXT);
+}
+
+static inline bool p4d_next_is_flattened(p4d_t p4d)
+{
+	return !!(p4d_val(p4d) & _PAGE_FLAT_NEXT);
+}
+
+static inline p4d_t p4d_mk_next_flattened(p4d_t p4d)
+{
+	return __p4d(p4d_val(p4d) | _PAGE_FLAT_NEXT);
+}
+
+static inline p4d_t p4d_clear_next_flattened(p4d_t p4d)
+{
+	return __p4d(p4d_val(p4d) & ~_PAGE_FLAT_NEXT);
+}
+
+
 #define pte_page(pte)	pfn_to_page(pte_pfn(pte))
 
 #define pmd_leaf pmd_leaf

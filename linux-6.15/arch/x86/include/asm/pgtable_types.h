@@ -20,6 +20,7 @@
 #define _PAGE_BIT_SOFTW1	9	/* available for programmer */
 #define _PAGE_BIT_SOFTW2	10	/* " */
 #define _PAGE_BIT_SOFTW3	11	/* " */
+
 #define _PAGE_BIT_PAT_LARGE	12	/* On 2MB or 1GB pages */
 #define _PAGE_BIT_SOFTW4	57	/* available for programmer */
 #define _PAGE_BIT_SOFTW5	58	/* available for programmer */
@@ -28,6 +29,11 @@
 #define _PAGE_BIT_PKEY_BIT2	61	/* Protection Keys, bit 3/4 */
 #define _PAGE_BIT_PKEY_BIT3	62	/* Protection Keys, bit 4/4 */
 #define _PAGE_BIT_NX		63	/* No execute: only valid after cpuid check */
+
+// Adding flattened next level flag
+#define _PAGE_BIT_FLAT_NEXT   _PAGE_BIT_SOFTW3
+#define _PAGE_FLAT_NEXT       (_AT(pteval_t, 1) << _PAGE_BIT_FLAT_NEXT)
+
 
 #define _PAGE_BIT_SPECIAL	_PAGE_BIT_SOFTW1
 #define _PAGE_BIT_CPA_TEST	_PAGE_BIT_SOFTW1

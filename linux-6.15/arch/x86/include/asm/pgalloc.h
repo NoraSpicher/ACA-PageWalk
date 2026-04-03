@@ -44,6 +44,36 @@ static inline unsigned int pgd_allocation_order(void)
 }
 
 /*
+ * Allocate a 2 MB region intended to back an experimental flattened
+ * PUD+PMD node.
+ *
+ * 2 MB = 512 * 4 KB pages = order-9 allocation.
+ *
+ * Task 1 note:
+ * this only proves we can obtain a physically contiguous region and
+ * use it as a would-be flattened page-table node. We are not yet
+ * making the hardware walker consume it for real translation.
+ */
+static inline void *flat_l3l2_alloc_node(gfp_t gfp)
+{
+    struct page *page;
+
+    page = alloc_pages(gfp | __GFP_ZERO, 9);
+    if (!page)
+        return NULL;
+
+    return page_address(page);
+}
+
+static inline void flat_l3l2_free_node(void *node)
+{
+    if (node)
+        __free_pages(virt_to_page(node), 9);
+}
+
+
+
+/*
  * Allocate and free page tables.
  */
 extern pgd_t *pgd_alloc(struct mm_struct *);

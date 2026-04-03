@@ -94,6 +94,80 @@
 #warning Unfortunate NUMA and NUMA Balancing config, growing page-frame for last_cpupid.
 #endif
 
+
+/*
+ * Temporary one-shot hook for testing flattened PUD+PMD allocation
+ * from the real __pud_alloc() path.
+ *
+ * We keep this extremely narrow so the experiment triggers only once
+ * and only in a chosen virtual address window.
+ */
+static bool flat_l3l2_hook_enable = true;
+static bool flat_l3l2_hook_done;
+
+/*
+ * Temporary boot-time test for experimental 2 MB flattened-node allocation.
+ *
+ * This does NOT touch live page tables.
+ * It only checks whether the kernel can allocate one 2 MB zeroed region
+ * using the helper we added in pgalloc.h.
+ */
+static int __init flat_l3l2_alloc_test_init(void)
+{
+    void *node;
+
+    pr_info("flat_l3l2_test: starting 2MB allocation test\n");
+
+    node = flat_l3l2_alloc_node(GFP_KERNEL);
+    if (!node) {
+        pr_info("flat_l3l2_test: 2MB allocation FAILED\n");
+        return 0;
+    }
+
+    pr_info("flat_l3l2_test: 2MB allocation SUCCEEDED, node=%p\n", node);
+
+	/*
+     * Temporary metadata-only test for the flattened-next PGD bit.
+     *
+     * This does NOT install anything into real page tables.
+     * We only create a dummy pgd_t value from the allocated node's physical
+     * address, set the experimental flattened bit, verify that the helper
+     * sees it, then clear it and verify that it is gone.
+     */
+    //{
+	phys_addr_t pa;
+	pgd_t test_pgd;
+
+	pa = __pa(node);
+
+	/*
+		* Build a dummy upper-level entry that points at the allocated node
+		* with normal table-entry flags.
+		*/
+	test_pgd = __pgd(pa | _PAGE_TABLE);
+
+	pr_info("flat_l3l2_test: initial flattened state = %d\n",
+			pgd_next_is_flattened(test_pgd));
+
+	test_pgd = pgd_mk_next_flattened(test_pgd);
+
+	pr_info("flat_l3l2_test: after set, flattened state = %d\n",
+			pgd_next_is_flattened(test_pgd));
+
+	test_pgd = pgd_clear_next_flattened(test_pgd);
+
+	pr_info("flat_l3l2_test: after clear, flattened state = %d\n",
+			pgd_next_is_flattened(test_pgd));
+    //}
+
+    flat_l3l2_free_node(node);
+
+    pr_info("flat_l3l2_test: freed 2MB test allocation\n");
+    return 0;
+}
+
+late_initcall(flat_l3l2_alloc_test_init);
+
 static vm_fault_t do_fault(struct vm_fault *vmf);
 static vm_fault_t do_anonymous_page(struct vm_fault *vmf);
 static bool vmf_pte_changed(struct vm_fault *vmf);
@@ -6618,8 +6692,97 @@ int __p4d_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address)
  * Allocate page upper directory.
  * We've already handled the fast-path in-line.
  */
+// int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
+// {
+// 	pud_t *new = pud_alloc_one(mm, address);
+// 	if (!new)
+// 		return -ENOMEM;
+
+// 	spin_lock(&mm->page_table_lock);
+// 	if (!p4d_present(*p4d)) {
+// 		mm_inc_nr_puds(mm);
+// 		smp_wmb(); /* See comment in pmd_install() */
+// 		p4d_populate(mm, p4d, new);
+// 	} else	/* Another has populated it */
+// 		pud_free(mm, new);
+// 	spin_unlock(&mm->page_table_lock);
+// 	return 0;
+// }
+
 int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 {
+	/*
+	 * Temporary experimental hook:
+	 * intercept one real PUD allocation attempt, replace the normal
+	 * 4 KB allocation with a 2 MB "flattened-node" allocation, mark
+	 * the parent entry as flattened, print proof, then stop.
+	 *
+	 * We do NOT let the kernel continue using this as a real live PUD
+	 * page yet, because the merged-node indexing/population logic has
+	 * not been implemented yet.
+	 */
+	if (flat_l3l2_hook_enable &&
+	    !flat_l3l2_hook_done &&
+	    address >= 0x700000000000UL &&
+	    address <  0x700040000000UL) {
+		void *flat_node;
+		phys_addr_t pa;
+		p4d_t test_entry;
+
+		pr_info("flat_l3l2: __pud_alloc hook hit for address 0x%lx\n",
+			address);
+
+		flat_node = flat_l3l2_alloc_node(GFP_KERNEL);
+		if (!flat_node) {
+			pr_info("flat_l3l2: 2MB flattened-node allocation FAILED\n");
+			flat_l3l2_hook_done = true;
+			return -ENOMEM;
+		}
+
+		pa = __pa(flat_node);
+
+		/*
+		 * Build the real parent entry that will point at the 2 MB
+		 * experimental flattened node, then mark that real entry as
+		 * flattened.
+		 *
+		 * This is the first checkpoint where we install the experimental
+		 * node into the live page-table tree instead of keeping it only
+		 * in a temporary variable.
+		 */
+		test_entry = __p4d(pa | _PAGE_TABLE);
+		test_entry = p4d_mk_next_flattened(test_entry);
+
+		pr_info("flat_l3l2: allocated 2MB flattened node at %p (pa=%pa)\n",
+			flat_node, &pa);
+
+		spin_lock(&mm->page_table_lock);
+
+		if (!p4d_present(*p4d)) {
+			mm_inc_nr_puds(mm);
+			smp_wmb(); /* keep ordering consistent with normal install path */
+			WRITE_ONCE(*p4d, test_entry);
+
+			pr_info("flat_l3l2: installed experimental flattened entry into real *p4d\n");
+			pr_info("flat_l3l2: real installed flattened bit = %d\n",
+				p4d_next_is_flattened(READ_ONCE(*p4d)));
+			pr_info("flat_l3l2: real installed p4d value = 0x%llx\n",
+				(unsigned long long)p4d_val(READ_ONCE(*p4d)));
+		} else {
+			pr_info("flat_l3l2: parent already populated, freeing experimental node\n");
+			spin_unlock(&mm->page_table_lock);
+			flat_l3l2_free_node(flat_node);
+			flat_l3l2_hook_done = true;
+			return -ENOMEM;
+		}
+
+		spin_unlock(&mm->page_table_lock);
+
+		flat_l3l2_hook_done = true;
+
+		return 0; // hopefully this works! 
+	}
+
 	pud_t *new = pud_alloc_one(mm, address);
 	if (!new)
 		return -ENOMEM;
@@ -6634,6 +6797,7 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 	spin_unlock(&mm->page_table_lock);
 	return 0;
 }
+
 #endif /* __PAGETABLE_PUD_FOLDED */
 
 #ifndef __PAGETABLE_PMD_FOLDED

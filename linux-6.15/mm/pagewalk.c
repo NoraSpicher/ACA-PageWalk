@@ -724,7 +724,7 @@ int walk_page_range_novma(struct mm_struct *mm, unsigned long start,
 			  void *private)
 {
 	struct mm_walk walk = {
-		.ops		= ops,
+		.ops		= &summary_ops,
 		.mm		= mm,
 		.pgd		= pgd,
 		.private	= private,
@@ -1202,9 +1202,6 @@ static int __init ptwalk_summary_init(void)
 
 	return 0;
 }
-
-
-
 
 
 static int __init ptwalk_reset_init(void)

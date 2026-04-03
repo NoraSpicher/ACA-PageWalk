@@ -31,6 +31,23 @@ void pgd_clear_bad(pgd_t *pgd)
 #ifndef __PAGETABLE_P4D_FOLDED
 void p4d_clear_bad(p4d_t *p4d)
 {
+	/*
+	 * Experimental flattening checkpoint:
+	 *
+	 * If this p4d entry is marked as "next level flattened", then do
+	 * not treat it as generic corruption yet. At this stage we know the
+	 * entry is non-standard on purpose because we installed it from our
+	 * __pud_alloc() hook.
+	 *
+	 * We only log that we recognized it, and leave it intact.
+	 */
+	if (p4d_next_is_flattened(*p4d)) {
+		pr_info("flat_l3l2: p4d_clear_bad saw experimental flattened p4d, leaving it intact\n");
+		pr_info("flat_l3l2: p4d value = 0x%llx\n",
+			(unsigned long long)p4d_val(*p4d));
+		return;
+	}
+
 	p4d_ERROR(*p4d);
 	p4d_clear(p4d);
 }
