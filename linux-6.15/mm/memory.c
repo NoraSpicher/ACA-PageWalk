@@ -6751,7 +6751,7 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 		 * in a temporary variable.
 		 */
 		test_entry = __p4d(pa | _PAGE_TABLE);
-		test_entry = p4d_mk_next_flattened(test_entry);
+		//test_entry = p4d_mk_next_flattened(test_entry);
 
 		pr_info("flat_l3l2: allocated 2MB flattened node at %p (pa=%pa)\n",
 			flat_node, &pa);
@@ -6807,8 +6807,22 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
  */
 int __pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)
 {
+	if (address >= 0x700000000000UL &&
+    		address <  0x700040000000UL) {
+	pr_info("flat_l3l2: ENTER __pmd_alloc for addr=0x%lx pud_val=0x%llx\n",
+        address,
+        (unsigned long long)pud_val(*pud));
+	}
 	spinlock_t *ptl;
+	if (address >= 0x700000000000UL &&
+    		address <  0x700040000000UL) {
+		pr_info("flat_l3l2: about to allocate PMD page\n");
+	}
 	pmd_t *new = pmd_alloc_one(mm, address);
+	if (address >= 0x700000000000UL &&
+    		address <  0x700040000000UL) {
+		pr_info("flat_l3l2: PMD allocation returned %p\n", new);
+	}
 	if (!new)
 		return -ENOMEM;
 
@@ -6816,6 +6830,10 @@ int __pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)
 	if (!pud_present(*pud)) {
 		mm_inc_nr_pmds(mm);
 		smp_wmb(); /* See comment in pmd_install() */
+		if (address >= 0x700000000000UL &&
+    		address <  0x700040000000UL) {
+			pr_info("flat_l3l2: populating PMD into pud\n");
+		}
 		pud_populate(mm, pud, new);
 	} else {	/* Another has populated it */
 		pmd_free(mm, new);

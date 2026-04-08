@@ -2953,11 +2953,72 @@ static inline p4d_t *p4d_alloc(struct mm_struct *mm, pgd_t *pgd,
 		NULL : p4d_offset(pgd, address);
 }
 
+// static inline pud_t *pud_alloc(struct mm_struct *mm, p4d_t *p4d,
+// 		unsigned long address)
+// {
+// 	return (unlikely(p4d_none(*p4d)) && __pud_alloc(mm, p4d, address)) ?
+// 		NULL : pud_offset(p4d, address);
+// }
+//Testing 2 MB implementation
 static inline pud_t *pud_alloc(struct mm_struct *mm, p4d_t *p4d,
-		unsigned long address)
+                unsigned long address)
 {
-	return (unlikely(p4d_none(*p4d)) && __pud_alloc(mm, p4d, address)) ?
-		NULL : pud_offset(p4d, address);
+        pud_t *pud;
+		if (address >= 0x700000000000UL &&
+    		address <  0x700040000000UL) {
+    
+        	pr_info("flat_l3l2: ENTER pud_alloc addr=0x%lx p4d_val=0x%llx\n",
+                address, (unsigned long long)p4d_val(*p4d));
+		}
+
+        if (unlikely(p4d_none(*p4d))) {
+			if (address >= 0x700000000000UL &&
+    		address <  0x700040000000UL) {
+                pr_info("flat_l3l2: p4d is none, calling __pud_alloc\n");
+			}
+
+                if (__pud_alloc(mm, p4d, address)) {
+					if (address >= 0x700000000000UL &&
+    					address <  0x700040000000UL) {
+                        pr_info("flat_l3l2: __pud_alloc returned failure\n");
+					}
+                        return NULL;
+                }
+				if (address >= 0x700000000000UL &&
+    				address <  0x700040000000UL) {
+                pr_info("flat_l3l2: returned from __pud_alloc, new p4d_val=0x%llx\n",
+                        (unsigned long long)p4d_val(*p4d));
+				}
+        } else {
+			if (address >= 0x700000000000UL &&
+    		address <  0x700040000000UL) {
+                pr_info("flat_l3l2: p4d already present\n");
+			}
+        }
+		if (address >= 0x700000000000UL &&
+    		address <  0x700040000000UL) {
+        	pr_info("flat_l3l2: about to call pud_offset\n");
+		}
+        pud = pud_offset(p4d, address);
+		if (address >= 0x700000000000UL &&
+    		address <  0x700040000000UL) {
+        	pr_info("flat_l3l2: pud_offset returned pud=%p\n", pud);
+		}
+
+        /*
+         * We now try to read the actual PUD entry that the next level will use.
+         * If the system hangs before the next log, then the problem is in
+         * dereferencing this computed pud pointer or in the helper path that
+         * produced it.
+         */
+		if (address >= 0x700000000000UL &&
+    		address <  0x700040000000UL) {
+			pr_info("flat_l3l2: about to read *pud\n");
+			pr_info("flat_l3l2: read pud_val=0x%llx\n", (unsigned long long)pud_val(*pud));
+		}
+                
+
+        return pud;
 }
 
 static inline pmd_t *pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)

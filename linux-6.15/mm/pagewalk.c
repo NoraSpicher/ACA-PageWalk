@@ -34,67 +34,67 @@
 };
 struct ptwalk_debug_stats summary_stats = {0};
 
- static int ptwalk_dbg_pgd_entry(pgd_t *pgd, unsigned long addr,
-				unsigned long next, struct mm_walk *walk)
-{
-	//struct ptwalk_debug_stats *stats = walk->private;
+//  static int ptwalk_dbg_pgd_entry(pgd_t *pgd, unsigned long addr,
+// 				unsigned long next, struct mm_walk *walk)
+// {
+// 	//struct ptwalk_debug_stats *stats = walk->private;
 
-	//stats->pgd_count++;
-	summary_stats.pgd_count++;
-	return 0;
-}
+// 	//stats->pgd_count++;
+// 	summary_stats.pgd_count++;
+// 	return 0;
+// }
 
-static int ptwalk_dbg_p4d_entry(p4d_t *p4d, unsigned long addr,
-				unsigned long next, struct mm_walk *walk)
-{
-	//struct ptwalk_debug_stats *stats = walk->private;
+// static int ptwalk_dbg_p4d_entry(p4d_t *p4d, unsigned long addr,
+// 				unsigned long next, struct mm_walk *walk)
+// {
+// 	//struct ptwalk_debug_stats *stats = walk->private;
 
-	//stats->p4d_count++;
-	summary_stats.p4d_count++;
-	return 0;
-}
+// 	//stats->p4d_count++;
+// 	summary_stats.p4d_count++;
+// 	return 0;
+// }
 
-static int ptwalk_dbg_pud_entry(pud_t *pud, unsigned long addr,
-				unsigned long next, struct mm_walk *walk)
-{
-	//struct ptwalk_debug_stats *stats = walk->private;
+// static int ptwalk_dbg_pud_entry(pud_t *pud, unsigned long addr,
+// 				unsigned long next, struct mm_walk *walk)
+// {
+// 	//struct ptwalk_debug_stats *stats = walk->private;
 
-	//stats->pud_count++;
-	summary_stats.pud_count++;
-	return 0;
-}
+// 	//stats->pud_count++;
+// 	summary_stats.pud_count++;
+// 	return 0;
+// }
 
-static int ptwalk_dbg_pmd_entry(pmd_t *pmd, unsigned long addr,
-				unsigned long next, struct mm_walk *walk)
-{
-	//struct ptwalk_debug_stats *stats = walk->private;
+// static int ptwalk_dbg_pmd_entry(pmd_t *pmd, unsigned long addr,
+// 				unsigned long next, struct mm_walk *walk)
+// {
+// 	//struct ptwalk_debug_stats *stats = walk->private;
 
-	//stats->pmd_count++;
-	summary_stats.pmd_count++;
-	return 0;
-}
+// 	//stats->pmd_count++;
+// 	summary_stats.pmd_count++;
+// 	return 0;
+// }
 
-static int ptwalk_dbg_pte_entry(pte_t *pte, unsigned long addr,
-				unsigned long next, struct mm_walk *walk)
-{
-	//struct ptwalk_debug_stats *stats = walk->private;
+// static int ptwalk_dbg_pte_entry(pte_t *pte, unsigned long addr,
+// 				unsigned long next, struct mm_walk *walk)
+// {
+// 	//struct ptwalk_debug_stats *stats = walk->private;
 
-	//stats->pte_count++;
-	summary_stats.pte_count++;
-	return 0;
-}
-
-
+// 	//stats->pte_count++;
+// 	summary_stats.pte_count++;
+// 	return 0;
+// }
 
 
-struct mm_walk_ops summary_ops = {
-		.pgd_entry = ptwalk_dbg_pgd_entry,
-		.p4d_entry = ptwalk_dbg_p4d_entry,
-		.pud_entry = ptwalk_dbg_pud_entry,
-		.pmd_entry = ptwalk_dbg_pmd_entry,
-		.pte_entry = ptwalk_dbg_pte_entry,
-		.walk_lock = PGWALK_RDLOCK,
-	};
+
+
+// struct mm_walk_ops summary_ops = {
+// 		.pgd_entry = ptwalk_dbg_pgd_entry,
+// 		.p4d_entry = ptwalk_dbg_p4d_entry,
+// 		.pud_entry = ptwalk_dbg_pud_entry,
+// 		.pmd_entry = ptwalk_dbg_pmd_entry,
+// 		.pte_entry = ptwalk_dbg_pte_entry,
+// 		.walk_lock = PGWALK_RDLOCK,
+// 	};
 
 
  
@@ -150,6 +150,7 @@ static int walk_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 	int err = 0;
 	spinlock_t *ptl;
 	// pr_info("PTE REACHED\n");
+	summary_stats.pte_count++;
 
 	if (walk->no_vma) {
 		/*
@@ -190,6 +191,7 @@ static int walk_pmd_range(pud_t *pud, unsigned long addr, unsigned long end,
 	int err = 0;
 	int depth = real_depth(3);
 	// pr_info("PMD REACHED\n");
+	summary_stats.pmd_count++;
 
 	pmd = pmd_offset(pud, addr);
 	do {
@@ -263,6 +265,7 @@ static int walk_pud_range(p4d_t *p4d, unsigned long addr, unsigned long end,
 	int err = 0;
 	int depth = real_depth(2);
 	// pr_info("PUD REACHED\n");
+	summary_stats.pud_count++;
 
 	pud = pud_offset(p4d, addr);
 	do {
@@ -331,6 +334,7 @@ static int walk_p4d_range(pgd_t *pgd, unsigned long addr, unsigned long end,
 	int err = 0;
 	int depth = real_depth(1);
 	// pr_info("P4D REACHED\n");
+	summary_stats.p4d_count++;
 
 	p4d = p4d_offset(pgd, addr);
 	do {
@@ -371,6 +375,7 @@ static int walk_pgd_range(unsigned long addr, unsigned long end,
 	bool has_install = ops->install_pte;
 	int err = 0;
 	// pr_info("PGD REACHED\n");
+	summary_stats.pgd_count++;
 
 	if (walk->pgd)
 		pgd = walk->pgd + pgd_index(addr);
@@ -559,7 +564,7 @@ int walk_page_range_mm(struct mm_struct *mm, unsigned long start,
 	unsigned long next;
 	struct vm_area_struct *vma;
 	struct mm_walk walk = {
-		.ops		= &summary_ops,
+		.ops		= ops,
 		.mm		= mm,
 		.private	= private,
 	};
@@ -724,7 +729,7 @@ int walk_page_range_novma(struct mm_struct *mm, unsigned long start,
 			  void *private)
 {
 	struct mm_walk walk = {
-		.ops		= &summary_ops,
+		.ops		= ops,
 		.mm		= mm,
 		.pgd		= pgd,
 		.private	= private,
@@ -769,7 +774,7 @@ int walk_page_range_vma(struct vm_area_struct *vma, unsigned long start,
 {
 
 	struct mm_walk walk = {
-		.ops		= &summary_ops,
+		.ops		= ops,
 		.mm		= vma->vm_mm,
 		.vma		= vma,
 		.private	= private,
@@ -791,7 +796,7 @@ int walk_page_vma(struct vm_area_struct *vma, const struct mm_walk_ops *ops,
 		void *private)
 {
 	struct mm_walk walk = {
-		.ops		= &summary_ops,
+		.ops		= ops,
 		.mm		= vma->vm_mm,
 		.vma		= vma,
 		.private	= private,
@@ -842,7 +847,7 @@ int walk_page_mapping(struct address_space *mapping, pgoff_t first_index,
 		      void *private)
 {
 	struct mm_walk walk = {
-		.ops		= &summary_ops,
+		.ops		= ops,
 		.private	= private,
 	};
 	struct vm_area_struct *vma;
@@ -1104,48 +1109,7 @@ found:
 
 static int ptwalk_summary_show(struct seq_file *m, void *v)
 {
-	//struct mm_struct *mm = current->mm;
-	//struct vm_area_struct *vma;
-	// struct ptwalk_debug_stats stats = {0};
-	// unsigned long start, end;
-	//int err;
 
-	// const struct mm_walk_ops ops = {
-	// 	.pgd_entry = ptwalk_dbg_pgd_entry,
-	// 	.p4d_entry = ptwalk_dbg_p4d_entry,
-	// 	.pud_entry = ptwalk_dbg_pud_entry,
-	// 	.pmd_entry = ptwalk_dbg_pmd_entry,
-	// 	.pte_entry = ptwalk_dbg_pte_entry,
-	// 	.walk_lock = PGWALK_RDLOCK,
-	// };
-
-	// if (!mm) {
-	// 	seq_puts(m, "PT WALK SUMMARY: no current mm\n");
-	// 	return 0;
-	// }
-
-	// mmap_read_lock(mm);
-
-	// start = 0;
-	// end = 0;
-	// err = 0;
-
-	// {
-	// 	VMA_ITERATOR(vmi, mm, 0);
-
-	// 	for_each_vma(vmi, vma) {
-	// 		int walk_err;
-
-	// 		start = vma->vm_start;
-	// 		end = vma->vm_end;
-
-	// 		walk_err = walk_page_range(mm, start, end, &ops, &stats);
-	// 		if (walk_err && !err)
-	// 			err = walk_err;
-	// 	}
-	// }
-
-	// mmap_read_unlock(mm);
 
 	seq_printf(m,
 		   "PT WALK SUMMARY: FULL-MM pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu\n",
@@ -1154,32 +1118,7 @@ static int ptwalk_summary_show(struct seq_file *m, void *v)
 		   summary_stats.pud_count,
 		   summary_stats.pmd_count,
 		   summary_stats.pte_count);
-		   //err);
 
-	// vma = find_vma(mm, 0);
-	// if (!vma) {
-	// 	mmap_read_unlock(mm);
-	// 	seq_puts(m, "PT WALK SUMMARY: no VMA found\n");
-	// 	return 0;
-	// }
-
-	// start = vma->vm_start;
-	// end = min(vma->vm_end, start + (2UL << 20));
-	// //end = 2UL << 20;
-
-	// err = walk_page_range(mm, start, end, &ops, &stats);
-
-	// mmap_read_unlock(mm);
-
-	// seq_printf(m,
-	// 	   "PT WALK SUMMARY: start=%lx end=%lx pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu err=%d\n",
-	// 	   start, end,
-	// 	   stats.pgd_count,
-	// 	   stats.p4d_count,
-	// 	   stats.pud_count,
-	// 	   stats.pmd_count,
-	// 	   stats.pte_count,
-	// 	   err);
 
 	return 0;
 }
