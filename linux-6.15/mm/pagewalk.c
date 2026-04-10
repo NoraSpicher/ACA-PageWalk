@@ -33,16 +33,19 @@
 	unsigned long pmd_count;
 	unsigned long pte_count;
 };
-struct ptwalk_debug_stats summary_stats = {0};
+//struct ptwalk_debug_stats summary_stats = {0};
 
-static void ptwalk_reset_summary_stats(void)   //added a new reset helper for single walk statistics 
+struct ptwalk_debug_stats single_stats = {0};
+struct ptwalk_debug_stats range_stats  = {0};
+
+/*static void ptwalk_reset_summary_stats(void)   //added a new reset helper for single walk statistics 
 {
 	summary_stats.pgd_count = 0;
 	summary_stats.p4d_count = 0;
 	summary_stats.pud_count = 0;
 	summary_stats.pmd_count = 0;
 	summary_stats.pte_count = 0;
-}
+}*/
 
 
 //  static int ptwalk_dbg_pgd_entry(pgd_t *pgd, unsigned long addr,
@@ -131,17 +134,17 @@ static void ptwalk_single_one_addr(struct mm_struct *mm, unsigned long addr)
 	pte_t *pte;
 
 	pgd = pgd_offset(mm, addr);
-	summary_stats.pgd_count++;
+	single_stats.pgd_count++;
 	if (pgd_none(*pgd) || pgd_bad(*pgd))
 		return;
 
 	p4d = p4d_offset(pgd, addr);
-	summary_stats.p4d_count++;
+	single_stats.p4d_count++;
 	if (p4d_none(*p4d) || p4d_bad(*p4d))
 		return;
 
 	pud = pud_offset(p4d, addr);
-	summary_stats.pud_count++;
+	single_stats.pud_count++;
 	if (pud_none(*pud) || !pud_present(*pud))
 		return;
 
@@ -149,7 +152,7 @@ static void ptwalk_single_one_addr(struct mm_struct *mm, unsigned long addr)
 		return;
 
 	pmd = pmd_offset(pud, addr);
-	summary_stats.pmd_count++;
+	single_stats.pmd_count++;
 	if (pmd_none(*pmd) || !pmd_present(*pmd))
 		return;
 
@@ -160,7 +163,7 @@ static void ptwalk_single_one_addr(struct mm_struct *mm, unsigned long addr)
 	if (!pte)
 		return;
 
-	summary_stats.pte_count++;
+	single_stats.pte_count++;
 }
 
 // added this function for N addresses looping
@@ -184,6 +187,7 @@ static int walk_pte_range_inner(pte_t *pte, unsigned long addr,
 	
 
 	for (;;) {
+		range_stats.pte_count++;  // added this here 
 		walk->dbg_pte_count++;
 		if (ops->install_pte && pte_none(ptep_get(pte))) {
 			pte_t new_pte;
@@ -217,7 +221,7 @@ static int walk_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 	int err = 0;
 	spinlock_t *ptl;
 	// pr_info("PTE REACHED\n");
-	summary_stats.pte_count++;   // commented out temporarily for single walk measurement 
+	//summary_stats.pte_count++;   // commented out temporarily for single walk measurement 
 
 	if (walk->no_vma) {
 		/*
@@ -258,13 +262,14 @@ static int walk_pmd_range(pud_t *pud, unsigned long addr, unsigned long end,
 	int err = 0;
 	int depth = real_depth(3);
 	// pr_info("PMD REACHED\n");
-	summary_stats.pmd_count++;  // commented out temporarily for single walk measurement 
+	//summary_stats.pmd_count++;  // commented out temporarily for single walk measurement 
 
 
 	pmd = pmd_offset(pud, addr);
 	do {
 again:
 		next = pmd_addr_end(addr, end);
+		range_stats.pmd_count++;
 		walk->dbg_pmd_count++;
 		if (pmd_none(*pmd)) {
 			if (has_install)
@@ -333,13 +338,14 @@ static int walk_pud_range(p4d_t *p4d, unsigned long addr, unsigned long end,
 	int err = 0;
 	int depth = real_depth(2);
 	// pr_info("PUD REACHED\n");
-	summary_stats.pud_count++;  // commented out temporarily for single walk measurement 
+	//summary_stats.pud_count++;  // commented out temporarily for single walk measurement 
 
 
 	pud = pud_offset(p4d, addr);
 	do {
  again:
 		next = pud_addr_end(addr, end);
+		range_stats.pud_count++;
 		walk->dbg_pud_count++;
 		if (pud_none(*pud)) {
 			if (has_install)
@@ -403,12 +409,14 @@ static int walk_p4d_range(pgd_t *pgd, unsigned long addr, unsigned long end,
 	int err = 0;
 	int depth = real_depth(1);
 	// pr_info("P4D REACHED\n");
-	summary_stats.p4d_count++;  // commented out temporarily for single walk measurement 
+	//summary_stats.p4d_count++;  // commented out temporarily for single walk measurement 
 
 
 	p4d = p4d_offset(pgd, addr);
 	do {
+		
 		next = p4d_addr_end(addr, end);
+		range_stats.p4d_count++; // added this here 
 		walk->dbg_p4d_count++;
 		if (p4d_none_or_clear_bad(p4d)) {
 			if (has_install)
@@ -445,7 +453,7 @@ static int walk_pgd_range(unsigned long addr, unsigned long end,
 	bool has_install = ops->install_pte;
 	int err = 0;
 	// pr_info("PGD REACHED\n");
-	summary_stats.pgd_count++;  // commented out temporarily for single walk measurement 
+	//summary_stats.pgd_count++;  // commented out temporarily for single walk measurement 
 
 
 	if (walk->pgd)
@@ -453,6 +461,7 @@ static int walk_pgd_range(unsigned long addr, unsigned long end,
 	else
 		pgd = pgd_offset(walk->mm, addr);
 	do {
+		range_stats.pgd_count++;   // added this here for stats 
 		walk->dbg_pgd_count++;
 		next = pgd_addr_end(addr, end);
 		if (pgd_none_or_clear_bad(pgd)) {
@@ -1171,6 +1180,37 @@ found:
 
 
 // Added structures:
+static void ptwalk_reset_single_stats(void)
+{
+	single_stats.pgd_count = 0;
+	single_stats.p4d_count = 0;
+	single_stats.pud_count = 0;
+	single_stats.pmd_count = 0;
+	single_stats.pte_count = 0;
+}
+
+static void ptwalk_reset_range_stats(void)
+{
+	range_stats.pgd_count = 0;
+	range_stats.p4d_count = 0;
+	range_stats.pud_count = 0;
+	range_stats.pmd_count = 0;
+	range_stats.pte_count = 0;
+}
+
+// added range walk ops
+static int ptwalk_range_pte_entry(pte_t *pte,
+                                 unsigned long addr,
+                                 unsigned long next,
+                                 struct mm_walk *walk)
+{
+    return 0;
+}
+
+static const struct mm_walk_ops ptwalk_range_ops = {
+    .pte_entry = ptwalk_range_pte_entry,
+    .walk_lock = PGWALK_RDLOCK,
+};
 
 // added this function to handle the writing to the /proc/ptwalk_run
 
@@ -1180,8 +1220,10 @@ static ssize_t ptwalk_run_write(struct file *file, const char __user *ubuf,
 	char buf[128];
 	unsigned long start;
 	unsigned long npages;
+	unsigned long end;
 	char mode[16];
 	int ret;
+	int err;
 	struct mm_struct *mm = current->mm;
 
 	if (count == 0)
@@ -1199,47 +1241,75 @@ static ssize_t ptwalk_run_write(struct file *file, const char __user *ubuf,
 	if (ret != 3)
 		return -EINVAL;
 
-	if (npages == 0)
-		return -EINVAL;
-
-	if (strcmp(mode, "single") != 0)
-		return -EINVAL;
-
 	if (!mm)
 		return -EINVAL;
 
-	ptwalk_reset_summary_stats();
+	if (npages == 0)
+		return -EINVAL;
 
-	mmap_read_lock(mm);
-	ptwalk_single_n_addrs(mm, start, npages);
-	mmap_read_unlock(mm);
+	end = start + npages * PAGE_SIZE;
+	if (end <= start)
+		return -EINVAL;
 
-	pr_info("PT WALK SUMMARY: SINGLE pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu\n",
-		summary_stats.pgd_count,
-		summary_stats.p4d_count,
-		summary_stats.pud_count,
-		summary_stats.pmd_count,
-		summary_stats.pte_count);
+	if (strcmp(mode, "single") == 0) {
+		ptwalk_reset_single_stats();
 
-	return count;
+		mmap_read_lock(mm);
+		ptwalk_single_n_addrs(mm, start, npages);
+		mmap_read_unlock(mm);
+
+		pr_info("PT WALK SUMMARY: SINGLE pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu\n",
+			single_stats.pgd_count,
+			single_stats.p4d_count,
+			single_stats.pud_count,
+			single_stats.pmd_count,
+			single_stats.pte_count);
+
+		return count;
+	}
+
+	if (strcmp(mode, "range") == 0) {
+		ptwalk_reset_range_stats();
+
+		mmap_read_lock(mm);
+		err = walk_page_range(mm, start, end, &ptwalk_range_ops, NULL);
+		mmap_read_unlock(mm);
+
+		if (err)
+			return err;
+
+		pr_info("PT WALK SUMMARY: RANGE pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu\n",
+			range_stats.pgd_count,
+			range_stats.p4d_count,
+			range_stats.pud_count,
+			range_stats.pmd_count,
+			range_stats.pte_count);
+
+		return count;
+	}
+
+	return -EINVAL;
 }
-
-
 
 
 
 static int ptwalk_summary_show(struct seq_file *m, void *v)
 {
-
+	seq_printf(m,
+		   "PT WALK SUMMARY: SINGLE pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu\n",
+		   single_stats.pgd_count,
+		   single_stats.p4d_count,
+		   single_stats.pud_count,
+		   single_stats.pmd_count,
+		   single_stats.pte_count);
 
 	seq_printf(m,
-		   "PT WALK SUMMARY: FULL-MM pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu\n",
-		   summary_stats.pgd_count,
-		   summary_stats.p4d_count,
-		   summary_stats.pud_count,
-		   summary_stats.pmd_count,
-		   summary_stats.pte_count);
-
+		   "PT WALK SUMMARY: RANGE  pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu\n",
+		   range_stats.pgd_count,
+		   range_stats.p4d_count,
+		   range_stats.pud_count,
+		   range_stats.pmd_count,
+		   range_stats.pte_count);
 
 	return 0;
 }
@@ -1254,11 +1324,17 @@ static int ptwalk_summary_show(struct seq_file *m, void *v)
 	summary_stats.pte_count = 0;
 	return 0;
 }*/
+
 static int ptwalk_reset(struct seq_file *m, void *v)
 {
-	ptwalk_reset_summary_stats();
+	ptwalk_reset_single_stats();
+	ptwalk_reset_range_stats();
 	return 0;
 }
+
+
+//added new resets
+
 
 //added this which is proc ops for /proc/ptwalk_run
 static const struct proc_ops ptwalk_run_proc_ops = {
