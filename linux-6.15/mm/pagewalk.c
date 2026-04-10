@@ -6,6 +6,7 @@
 #include <linux/mmu_context.h>
 #include <linux/swap.h>
 #include <linux/swapops.h>
+#include <linux/uaccess.h>   // added this to copy user input from /proc/ptwalk_run
 
 #include <asm/tlbflush.h>
 
@@ -33,6 +34,16 @@
 	unsigned long pte_count;
 };
 struct ptwalk_debug_stats summary_stats = {0};
+
+static void ptwalk_reset_summary_stats(void)   //added a new reset helper for single walk statistics 
+{
+	summary_stats.pgd_count = 0;
+	summary_stats.p4d_count = 0;
+	summary_stats.pud_count = 0;
+	summary_stats.pmd_count = 0;
+	summary_stats.pte_count = 0;
+}
+
 
 //  static int ptwalk_dbg_pgd_entry(pgd_t *pgd, unsigned long addr,
 // 				unsigned long next, struct mm_walk *walk)
@@ -109,6 +120,62 @@ static int real_depth(int depth)
 	return depth;
 }
 
+// added this new function which is the single address walker
+
+static void ptwalk_single_one_addr(struct mm_struct *mm, unsigned long addr)
+{
+	pgd_t *pgd;
+	p4d_t *p4d;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *pte;
+
+	pgd = pgd_offset(mm, addr);
+	summary_stats.pgd_count++;
+	if (pgd_none(*pgd) || pgd_bad(*pgd))
+		return;
+
+	p4d = p4d_offset(pgd, addr);
+	summary_stats.p4d_count++;
+	if (p4d_none(*p4d) || p4d_bad(*p4d))
+		return;
+
+	pud = pud_offset(p4d, addr);
+	summary_stats.pud_count++;
+	if (pud_none(*pud) || !pud_present(*pud))
+		return;
+
+	if (pud_leaf(*pud))
+		return;
+
+	pmd = pmd_offset(pud, addr);
+	summary_stats.pmd_count++;
+	if (pmd_none(*pmd) || !pmd_present(*pmd))
+		return;
+
+	if (pmd_leaf(*pmd))
+		return;
+
+	pte = pte_offset_kernel(pmd, addr);
+	if (!pte)
+		return;
+
+	summary_stats.pte_count++;
+}
+
+// added this function for N addresses looping
+
+static void ptwalk_single_n_addrs(struct mm_struct *mm,
+				  unsigned long start,
+				  unsigned long npages)
+{
+	unsigned long i;
+	unsigned long addr = start;
+
+	for (i = 0; i < npages; i++, addr += PAGE_SIZE)
+		ptwalk_single_one_addr(mm, addr);
+}
+
 static int walk_pte_range_inner(pte_t *pte, unsigned long addr,
 				unsigned long end, struct mm_walk *walk)
 {
@@ -150,7 +217,7 @@ static int walk_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 	int err = 0;
 	spinlock_t *ptl;
 	// pr_info("PTE REACHED\n");
-	summary_stats.pte_count++;
+	summary_stats.pte_count++;   // commented out temporarily for single walk measurement 
 
 	if (walk->no_vma) {
 		/*
@@ -191,7 +258,8 @@ static int walk_pmd_range(pud_t *pud, unsigned long addr, unsigned long end,
 	int err = 0;
 	int depth = real_depth(3);
 	// pr_info("PMD REACHED\n");
-	summary_stats.pmd_count++;
+	summary_stats.pmd_count++;  // commented out temporarily for single walk measurement 
+
 
 	pmd = pmd_offset(pud, addr);
 	do {
@@ -265,7 +333,8 @@ static int walk_pud_range(p4d_t *p4d, unsigned long addr, unsigned long end,
 	int err = 0;
 	int depth = real_depth(2);
 	// pr_info("PUD REACHED\n");
-	summary_stats.pud_count++;
+	summary_stats.pud_count++;  // commented out temporarily for single walk measurement 
+
 
 	pud = pud_offset(p4d, addr);
 	do {
@@ -334,7 +403,8 @@ static int walk_p4d_range(pgd_t *pgd, unsigned long addr, unsigned long end,
 	int err = 0;
 	int depth = real_depth(1);
 	// pr_info("P4D REACHED\n");
-	summary_stats.p4d_count++;
+	summary_stats.p4d_count++;  // commented out temporarily for single walk measurement 
+
 
 	p4d = p4d_offset(pgd, addr);
 	do {
@@ -375,7 +445,8 @@ static int walk_pgd_range(unsigned long addr, unsigned long end,
 	bool has_install = ops->install_pte;
 	int err = 0;
 	// pr_info("PGD REACHED\n");
-	summary_stats.pgd_count++;
+	summary_stats.pgd_count++;  // commented out temporarily for single walk measurement 
+
 
 	if (walk->pgd)
 		pgd = walk->pgd + pgd_index(addr);
@@ -1101,7 +1172,57 @@ found:
 
 // Added structures:
 
+// added this function to handle the writing to the /proc/ptwalk_run
 
+static ssize_t ptwalk_run_write(struct file *file, const char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char buf[128];
+	unsigned long start;
+	unsigned long npages;
+	char mode[16];
+	int ret;
+	struct mm_struct *mm = current->mm;
+
+	if (count == 0)
+		return 0;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, ubuf, count))
+		return -EFAULT;
+
+	buf[count] = '\0';
+
+	ret = sscanf(buf, "%lx %lu %15s", &start, &npages, mode);
+	if (ret != 3)
+		return -EINVAL;
+
+	if (npages == 0)
+		return -EINVAL;
+
+	if (strcmp(mode, "single") != 0)
+		return -EINVAL;
+
+	if (!mm)
+		return -EINVAL;
+
+	ptwalk_reset_summary_stats();
+
+	mmap_read_lock(mm);
+	ptwalk_single_n_addrs(mm, start, npages);
+	mmap_read_unlock(mm);
+
+	pr_info("PT WALK SUMMARY: SINGLE pgd=%lu p4d=%lu pud=%lu pmd=%lu pte=%lu\n",
+		summary_stats.pgd_count,
+		summary_stats.p4d_count,
+		summary_stats.pud_count,
+		summary_stats.pmd_count,
+		summary_stats.pte_count);
+
+	return count;
+}
 
 
 
@@ -1123,7 +1244,8 @@ static int ptwalk_summary_show(struct seq_file *m, void *v)
 	return 0;
 }
 
-static int ptwalk_reset(struct seq_file *m, void *v)
+// temporarily commented our noras reset to call my rerst , which is pretty much the same 
+/*static int ptwalk_reset(struct seq_file *m, void *v)
 {
 	summary_stats.pgd_count = 0;
 	summary_stats.p4d_count = 0;
@@ -1131,12 +1253,30 @@ static int ptwalk_reset(struct seq_file *m, void *v)
 	summary_stats.pmd_count = 0;
 	summary_stats.pte_count = 0;
 	return 0;
+}*/
+static int ptwalk_reset(struct seq_file *m, void *v)
+{
+	ptwalk_reset_summary_stats();
+	return 0;
 }
 
+//added this which is proc ops for /proc/ptwalk_run
+static const struct proc_ops ptwalk_run_proc_ops = {
+	.proc_write = ptwalk_run_write,
+};
 static int __init ptwalk_summary_init(void)
 {
 	if (!proc_create_single("ptwalk_summary", 0444, NULL,
 				ptwalk_summary_show))
+		return -ENOMEM;
+
+	return 0;
+}
+
+//added another init fucntion for /proc/ptwalk_run
+static int __init ptwalk_run_init(void)
+{
+	if (!proc_create("ptwalk_run", 0222, NULL, &ptwalk_run_proc_ops))
 		return -ENOMEM;
 
 	return 0;
@@ -1153,4 +1293,6 @@ static int __init ptwalk_reset_init(void)
 }
 late_initcall(ptwalk_summary_init);
 late_initcall(ptwalk_reset_init);
+late_initcall(ptwalk_run_init);  // added this to register my new proc function 
+
 
