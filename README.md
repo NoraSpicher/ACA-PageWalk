@@ -26,6 +26,8 @@ To work with gdb, use `gdbrun.sh` in one tab. Then, in another tab, run `gdb lin
 The file system should be fully set up and hopefully won't need modification. If you do modify it (for example, to add benchmark files), you can update the zip file used by qemu with these commands (run from inside the `initramfs` directory):
 
 ```
+rm initramfs.cpio.gz
+rm ../initramfs.cpi.gz
 find . -print0 | cpio --null -ov --format=newc > initramfs.cpio
 gzip ./initramfs.cpio
 cp ./initramfs.cpio.gz ./../
