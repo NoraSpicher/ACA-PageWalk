@@ -2967,42 +2967,42 @@ static inline pud_t *pud_alloc(struct mm_struct *mm, p4d_t *p4d,
 		if (address >= 0x700000000000UL &&
     		address <  0x700040000000UL) {
     
-        	pr_info("flat_l3l2: ENTER pud_alloc addr=0x%lx p4d_val=0x%llx\n",
-                address, (unsigned long long)p4d_val(*p4d));
+        	//pr_info("flat_l3l2: ENTER pud_alloc addr=0x%lx p4d_val=0x%llx\n",
+                //address, (unsigned long long)p4d_val(*p4d));
 		}
 
         if (unlikely(p4d_none(*p4d))) {
 			if (address >= 0x700000000000UL &&
     		address <  0x700040000000UL) {
-                pr_info("flat_l3l2: p4d is none, calling __pud_alloc\n");
+                //pr_info("flat_l3l2: p4d is none, calling __pud_alloc\n");
 			}
 
                 if (__pud_alloc(mm, p4d, address)) {
 					if (address >= 0x700000000000UL &&
     					address <  0x700040000000UL) {
-                        pr_info("flat_l3l2: __pud_alloc returned failure\n");
+                        //pr_info("flat_l3l2: __pud_alloc returned failure\n");
 					}
                         return NULL;
                 }
 				if (address >= 0x700000000000UL &&
     				address <  0x700040000000UL) {
-                pr_info("flat_l3l2: returned from __pud_alloc, new p4d_val=0x%llx\n",
-                        (unsigned long long)p4d_val(*p4d));
+                //pr_info("flat_l3l2: returned from __pud_alloc, new p4d_val=0x%llx\n",
+                        //(unsigned long long)p4d_val(*p4d));
 				}
         } else {
 			if (address >= 0x700000000000UL &&
     		address <  0x700040000000UL) {
-                pr_info("flat_l3l2: p4d already present\n");
+                //pr_info("flat_l3l2: p4d already present\n");
 			}
         }
 		if (address >= 0x700000000000UL &&
     		address <  0x700040000000UL) {
-        	pr_info("flat_l3l2: about to call pud_offset\n");
+        	//pr_info("flat_l3l2: about to call pud_offset\n");
 		}
         pud = pud_offset(p4d, address);
 		if (address >= 0x700000000000UL &&
     		address <  0x700040000000UL) {
-        	pr_info("flat_l3l2: pud_offset returned pud=%p\n", pud);
+        	//pr_info("flat_l3l2: pud_offset returned pud=%p\n", pud);
 		}
 
         /*
