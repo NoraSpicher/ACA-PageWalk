@@ -102,8 +102,8 @@
  * We keep this extremely narrow so the experiment triggers only once
  * and only in a chosen virtual address window.
  */
-static bool flat_l3l2_hook_enable = true;
-static bool flat_l3l2_hook_done;
+// static bool flat_l3l2_hook_enable = true;
+// static bool flat_l3l2_hook_done;
 
 /*
  * Temporary boot-time test for experimental 2 MB flattened-node allocation.
@@ -6721,10 +6721,13 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 	 * page yet, because the merged-node indexing/population logic has
 	 * not been implemented yet.
 	 */
-	if (flat_l3l2_hook_enable &&
-	    !flat_l3l2_hook_done &&
-	    address >= 0x700000000000UL &&
-	    address <  0x700040000000UL) {
+
+	 //Try to allocate a 2 MB section if we are in a certain range 
+	// For now, commenting the if statement
+	// if (flat_l3l2_hook_enable &&
+	//     !flat_l3l2_hook_done &&
+	//     address >= 0x700000000000UL &&
+	//     address <  0x700040000000UL) {
 	// 	void *flat_node;
 	// 	phys_addr_t pa;
 	// 	//p4d_t test_entry;
@@ -6805,21 +6808,23 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 		pud_free(mm, new);
 	spin_unlock(&mm->page_table_lock);
 	return 0;
-	}
+	//}
 
-	pud_t *new = pud_alloc_one(mm, address);
-	if (!new)
-		return -ENOMEM;
+	//Normal allocation, a 4 kb node 
+	// For now, try 2 MB all the time
+	// pud_t *new = pud_alloc_one(mm, address);
+	// if (!new)
+	// 	return -ENOMEM;
 
-	spin_lock(&mm->page_table_lock);
-	if (!p4d_present(*p4d)) {
-		mm_inc_nr_puds(mm);
-		smp_wmb(); /* See comment in pmd_install() */
-		p4d_populate(mm, p4d, new);
-	} else	/* Another has populated it */
-		pud_free(mm, new);
-	spin_unlock(&mm->page_table_lock);
-	return 0;
+	// spin_lock(&mm->page_table_lock);
+	// if (!p4d_present(*p4d)) {
+	// 	mm_inc_nr_puds(mm);
+	// 	smp_wmb(); /* See comment in pmd_install() */
+	// 	p4d_populate(mm, p4d, new);
+	// } else	/* Another has populated it */
+	// 	pud_free(mm, new);
+	// spin_unlock(&mm->page_table_lock);
+	// return 0;
 }
 
 #endif /* __PAGETABLE_PUD_FOLDED */
