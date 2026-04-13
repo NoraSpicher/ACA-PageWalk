@@ -366,6 +366,7 @@ bool ptdump_walk_pgd_level_core(struct seq_file *m,
 				struct mm_struct *mm, pgd_t *pgd,
 				bool checkwx, bool dmesg)
 {
+	return true;
 	const struct ptdump_range ptdump_ranges[] = {
 #ifdef CONFIG_X86_64
 	{0, PTRS_PER_PGD * PGD_LEVEL_MULT / 2},

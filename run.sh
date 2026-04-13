@@ -6,5 +6,5 @@ qemu-system-x86_64 \
         -enable-kvm \
         -nographic \
         -pidfile vm.pid \
-	-append "console=ttyS0 root=/dev/sda earlyprintk=serial net.ifnames=0 nokaslr" \
+	-append "console=ttyS0 root=/dev/sda earlyprintk=serial net.ifnames=0 nokaslr nopti rodata=n init=/bin/busybox sh" \
         2>&1 | tee ./logs/vm.log

@@ -408,19 +408,33 @@ pte_t *pte_offset_map_rw_nolock(struct mm_struct *mm, pmd_t *pmd,
 pte_t *__pte_offset_map_lock(struct mm_struct *mm, pmd_t *pmd,
 			     unsigned long addr, spinlock_t **ptlp)
 {
+// 	spinlock_t *ptl;
+// 	pmd_t pmdval;
+// 	pte_t *pte;
+// again:
+// 	pte = __pte_offset_map(pmd, addr, &pmdval);
+// 	if (unlikely(!pte))
+// 		return pte;
+// 	ptl = pte_lockptr(mm, &pmdval);
+// 	spin_lock(ptl);
+// 	if (likely(pmd_same(pmdval, pmdp_get_lockless(pmd)))) {
+// 		*ptlp = ptl;
+// 		return pte;
+// 	}
+// 	pte_unmap_unlock(pte, ptl);
+// 	goto again;
+
+//Bypass for flattening:
 	spinlock_t *ptl;
-	pmd_t pmdval;
-	pte_t *pte;
-again:
-	pte = __pte_offset_map(pmd, addr, &pmdval);
-	if (unlikely(!pte))
-		return pte;
-	ptl = pte_lockptr(mm, &pmdval);
-	spin_lock(ptl);
-	if (likely(pmd_same(pmdval, pmdp_get_lockless(pmd)))) {
-		*ptlp = ptl;
-		return pte;
-	}
-	pte_unmap_unlock(pte, ptl);
-	goto again;
+    pte_t *pte;
+
+    // Force all PTE locks to the MM global lock 
+    ptl = &mm->page_table_lock;
+    pte = pte_offset_map(pmd, addr);
+    if (!pte)
+        return NULL;
+
+    *ptlp = ptl;
+    spin_lock(ptl);
+    return pte;
 }

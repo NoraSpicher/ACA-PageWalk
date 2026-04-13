@@ -26,20 +26,28 @@ void ___pte_free_tlb(struct mmu_gather *tlb, struct page *pte)
 #if CONFIG_PGTABLE_LEVELS > 2
 void ___pmd_free_tlb(struct mmu_gather *tlb, pmd_t *pmd)
 {
-	paravirt_release_pmd(__pa(pmd) >> PAGE_SHIFT);
-	/*
-	 * NOTE! For PAE, any changes to the top page-directory-pointer-table
-	 * entries need a full cr3 reload to flush.
-	 */
-#ifdef CONFIG_X86_PAE
-	tlb->need_flush_all = 1;
-#endif
-	tlb_remove_ptdesc(tlb, virt_to_ptdesc(pmd));
+	// Since we are flattening pmd, we just return.
+	return;
+	// Normal pmd free logic:
+// 	paravirt_release_pmd(__pa(pmd) >> PAGE_SHIFT);
+// 	/*
+// 	 * NOTE! For PAE, any changes to the top page-directory-pointer-table
+// 	 * entries need a full cr3 reload to flush.
+// 	 */
+// #ifdef CONFIG_X86_PAE
+// 	tlb->need_flush_all = 1;
+// #endif
+// 	tlb_remove_ptdesc(tlb, virt_to_ptdesc(pmd));
 }
 
 #if CONFIG_PGTABLE_LEVELS > 3
 void ___pud_free_tlb(struct mmu_gather *tlb, pud_t *pud)
 {
+	// We need to free the whole 2 MB section here:
+	paravirt_release_pud(__pa(pud) >> PAGE_SHIFT);
+	tlb_flush_mmu(tlb); // For now we are gonna flush the tlb to make sure this page gets freed. this is BAD
+	__free_pages(virt_to_page(pud), 9);
+	return;
 	paravirt_release_pud(__pa(pud) >> PAGE_SHIFT);
 	tlb_remove_ptdesc(tlb, virt_to_ptdesc(pud));
 }

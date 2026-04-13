@@ -94,7 +94,6 @@
 #warning Unfortunate NUMA and NUMA Balancing config, growing page-frame for last_cpupid.
 #endif
 
-
 /*
  * Temporary one-shot hook for testing flattened PUD+PMD allocation
  * from the real __pud_alloc() path.
@@ -102,6 +101,7 @@
  * We keep this extremely narrow so the experiment triggers only once
  * and only in a chosen virtual address window.
  */
+
 // static bool flat_l3l2_hook_enable = true;
 // static bool flat_l3l2_hook_done;
 
@@ -475,8 +475,9 @@ void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
 
 void pmd_install(struct mm_struct *mm, pmd_t *pmd, pgtable_t *pte)
 {
-	spinlock_t *ptl = pmd_lock(mm, pmd);
-
+	//spinlock_t *ptl = pmd_lock(mm, pmd);
+	spinlock_t *ptl = &mm->page_table_lock;
+	spin_lock(ptl);
 	if (likely(pmd_none(*pmd))) {	/* Has another populated it ? */
 		mm_inc_nr_ptes(mm);
 		/*
@@ -1882,7 +1883,10 @@ static inline unsigned long zap_pmd_range(struct mmu_gather *tlb,
 		} else if (details && details->single_folio &&
 			   folio_test_pmd_mappable(details->single_folio) &&
 			   next - addr == HPAGE_PMD_SIZE && pmd_none(*pmd)) {
-			spinlock_t *ptl = pmd_lock(tlb->mm, pmd);
+			//spinlock_t *ptl = pmd_lock(tlb->mm, pmd);
+			spinlock_t *ptl = &tlb->mm->page_table_lock;
+			spin_lock(ptl);
+			
 			/*
 			 * Take and drop THP pmd lock so that we cannot return
 			 * prematurely, while zap_huge_pmd() has cleared *pmd,
@@ -5047,8 +5051,13 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 			!mm_forbids_zeropage(vma->vm_mm)) {
 		entry = pte_mkspecial(pfn_pte(my_zero_pfn(vmf->address),
 						vma->vm_page_prot));
-		vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
-				vmf->address, &vmf->ptl);
+
+		//Bypass locks
+		// vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
+		// 		vmf->address, &vmf->ptl);
+		vmf->pte = pte_offset_map(vmf->pmd, vmf->address);
+		vmf->ptl = &vma->vm_mm->page_table_lock;
+		spin_lock(vmf->ptl);
 		if (!vmf->pte)
 			goto unlock;
 		if (vmf_pte_changed(vmf)) {
@@ -5060,7 +5069,9 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 			goto unlock;
 		/* Deliver the page fault to userland, check inside PT lock */
 		if (userfaultfd_missing(vma)) {
-			pte_unmap_unlock(vmf->pte, vmf->ptl);
+			//pte_unmap_unlock(vmf->pte, vmf->ptl);
+			pte_unmap(vmf->pte);
+			spin_unlock(vmf->ptl);
 			return handle_userfault(vmf, VM_UFFD_MISSING);
 		}
 		goto setpte;
@@ -5109,7 +5120,9 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 
 	/* Deliver the page fault to userland, check inside PT lock */
 	if (userfaultfd_missing(vma)) {
-		pte_unmap_unlock(vmf->pte, vmf->ptl);
+		//pte_unmap_unlock(vmf->pte, vmf->ptl);
+		pte_unmap(vmf->pte);
+		spin_unlock(vmf->ptl);
 		folio_put(folio);
 		return handle_userfault(vmf, VM_UFFD_MISSING);
 	}
@@ -5127,8 +5140,11 @@ setpte:
 	/* No need to invalidate - it was non-present before */
 	update_mmu_cache_range(vmf, vma, addr, vmf->pte, nr_pages);
 unlock:
-	if (vmf->pte)
-		pte_unmap_unlock(vmf->pte, vmf->ptl);
+	if (vmf->pte){
+		//pte_unmap_unlock(vmf->pte, vmf->ptl);
+		pte_unmap(vmf->pte);
+		spin_unlock(vmf->ptl);
+	}
 	return ret;
 release:
 	folio_put(folio);
@@ -5256,7 +5272,9 @@ vm_fault_t do_set_pmd(struct vm_fault *vmf, struct page *page)
 			return VM_FAULT_OOM;
 	}
 
-	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
+	//vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
+	vmf->ptl = &vmf->vma->vm_mm->page_table_lock;
+	spin_lock(vmf->ptl);
 	if (unlikely(!pmd_none(*vmf->pmd)))
 		goto out;
 
@@ -6791,22 +6809,54 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 	// 	return 0; // hopefully this works! 
 	
 	//pud_t *new = pud_alloc_one(mm, address);
+	struct page *new_page;
+	pud_t *new;
 	pr_info("Allocating 2 MB node in __pud_alloc...\n");
-	pud_t *new = flat_l3l2_alloc_node(GFP_KERNEL);
+	new_page = alloc_pages(GFP_KERNEL, 9);
+	memset(page_address(new_page), 0, 2097152);
 
-	if (!new)	{
+	if (!new_page)	{
 		pr_info("Allocation failed\n");
 		return -ENOMEM;
 	}
+	split_page(new_page, 9);
+	for (int i = 0; i < 512; i++) {
+		struct page *p = new_page + i;
+		p->flags &= ~(1UL << PG_reserved);
+		pagetable_pmd_ctor(page_ptdesc(p)); // Initialize the lock for each 4KB slice
+	}
+	// Set some pointers, so the hardware doesn't break (it expects a tree with a 4 kB layer here)
+	volatile unsigned long *shim_table = (unsigned long *)page_address(new_page);
+	unsigned long pfn_base = page_to_pfn(new_page);
+
+	for (int i = 0; i < 512; i++) {
+    struct page *p = new_page + i;
+    
+    // 1. Clear any old flags
+    p->flags &= ~PAGE_FLAGS_CHECK_AT_PREP; 
+    
+    // 2. Initialize the spinlock for this 4KB slice
+    // Use 'pagetable_pmd_ctor' or 'pgtable_pmd_page_ctor' depending on your version
+    // If it fails to compile, use the one that worked earlier
+    pagetable_pmd_ctor(page_ptdesc(p));
+}
+	shim_table[511] = ((pfn_base + 512) << PAGE_SHIFT) | _PAGE_TABLE | _PAGE_USER;
+
+	//old:
+	//new = (pud_t *)shim_table;
+	//edit:
+	new = (pud_t *)page_address(new_page);  
 	
 	spin_lock(&mm->page_table_lock);
 	if (!p4d_present(*p4d)) {
 		mm_inc_nr_puds(mm);
 		smp_wmb(); /* See comment in pmd_install() */
-		p4d_populate(mm, p4d, new);
+		//p4d_populate(mm, p4d, new);
+		set_p4d(p4d, __p4d(__pa(new) | _PAGE_TABLE | _PAGE_USER));
 	} else	/* Another has populated it */
-		pud_free(mm, new);
+		__free_pages(new_page, 9); 
 	spin_unlock(&mm->page_table_lock);
+	native_flush_tlb_global();
 	return 0;
 	//}
 
@@ -6980,7 +7030,10 @@ retry:
 	pmdp = pmd_offset(pudp, address);
 	pmd = pmdp_get_lockless(pmdp);
 	if (pmd_leaf(pmd)) {
-		lock = pmd_lock(mm, pmdp);
+		//lock = pmd_lock(mm, pmdp);
+		lock = &mm->page_table_lock;
+		spin_lock(lock);
+
 		if (!unlikely(pmd_leaf(pmd))) {
 			spin_unlock(lock);
 			goto retry;
