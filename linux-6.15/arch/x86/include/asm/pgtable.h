@@ -1242,30 +1242,32 @@ static inline p4d_t *p4d_offset(pgd_t *pgd, unsigned long address)
 static inline pmd_t *pmd_offset(pud_t *pud, unsigned long address)
 {
     unsigned long pud_val = pud_val(*pud);
-    // Standard path for kernel or non-present PUDs
+    unsigned long phys_addr = pud_val & 0x000ffffffffff000;
+    unsigned long *pud_ptr;
+
+    // for when we are in kernel space
     if ((long)address < 0 || !(pud_val & _PAGE_PRESENT)) {
-        return (pmd_t *)((unsigned long)__va(pud_val & 0x000ffffffffff000) + (((address >> 21) & 511) * 8));
+        return (pmd_t *)((unsigned long)__va(phys_addr) + (((address >> 21) & 511) * 8));
     }
 
-    unsigned long vaddr_num = (unsigned long)__va(pud_val & 0x000ffffffffff000);
-    unsigned long *pud_ptr = (unsigned long *)vaddr_num;
+    //Find the pointer
+    pud_ptr = (unsigned long *)__va(phys_addr);
 
-    // Detect our 2MB shimmed node
-    if ((*(volatile unsigned long *)pud_ptr >> 12) == ((pud_val & 0x000ffffffffff000) >> 12) + 1) {
-        
-        /* THE BYPASS: If the caller is ptdump or a generic walker, 
-           the address will usually be perfectly aligned to 4KB or 2MB.
-           If we detect a perfect 2MB alignment, we return the standard 
-           offset so the walker doesn't crash on the shim. */
-        if ((address & 0x1FFFFF) == 0) {
-             return (pmd_t *)(vaddr_num + (((address >> 21) & 511) * 8));
+    //Check to make sure this is flattened for real use. Kinda jank, but hopefully better
+	//Seems to crash less often! Probably should move to PG_arch flag though
+    if (pud_ptr != 0) {
+        unsigned long entry0 = *(volatile unsigned long *)pud_ptr;
+        unsigned long entry511 = *(volatile unsigned long *)(pud_ptr + 511);
+        unsigned long base_pfn = phys_addr >> 12;
+
+        if (((entry0 >> 12) == base_pfn + 1) && ((entry511 >> 12) == base_pfn + 512)) {
+			//Do the shim table logic
+             return (pmd_t *)((unsigned long)__va(phys_addr) + 4096 + (((address >> 21) & 511) * 8));
         }
-
-        // Real process access: Jump past the shim
-        return (pmd_t *)(vaddr_num + 4096 + (((address >> 21) & 511) * 8));
     }
 
-    return (pmd_t *)(vaddr_num + (((address >> 21) & 511) * 8));
+    //for early use in startup, regular 4 kB table
+    return (pmd_t *)((unsigned long)__va(phys_addr) + (((address >> 21) & 511) * 8));
 }
 #define pmd_offset pmd_offset
 

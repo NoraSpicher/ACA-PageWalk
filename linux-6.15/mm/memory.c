@@ -6729,100 +6729,24 @@ int __p4d_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address)
 
 int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 {
-	/*
-	 * Temporary experimental hook:
-	 * intercept one real PUD allocation attempt, replace the normal
-	 * 4 KB allocation with a 2 MB "flattened-node" allocation, mark
-	 * the parent entry as flattened, print proof, then stop.
-	 *
-	 * We do NOT let the kernel continue using this as a real live PUD
-	 * page yet, because the merged-node indexing/population logic has
-	 * not been implemented yet.
-	 */
-
-	 //Try to allocate a 2 MB section if we are in a certain range 
-	// For now, commenting the if statement
-	// if (flat_l3l2_hook_enable &&
-	//     !flat_l3l2_hook_done &&
-	//     address >= 0x700000000000UL &&
-	//     address <  0x700040000000UL) {
-	// 	void *flat_node;
-	// 	phys_addr_t pa;
-	// 	//p4d_t test_entry;
-
-	// 	pr_info("flat_l3l2: __pud_alloc hook hit for address 0x%lx\n",
-	// 		address);
-		
-	// 	flat_node = flat_l3l2_alloc_node(GFP_KERNEL);
-	// 	if (!flat_node) {
-	// 		pr_info("flat_l3l2: 2MB flattened-node allocation FAILED\n");
-	// 		flat_l3l2_hook_done = true;
-	// 		return -ENOMEM;
-	// 	}
-
-	// 	pa = __pa(flat_node);
-
-	// 	/*
-	// 	 * Build the real parent entry that will point at the 2 MB
-	// 	 * experimental flattened node, then mark that real entry as
-	// 	 * flattened.
-	// 	 *
-	// 	 * This is the first checkpoint where we install the experimental
-	// 	 * node into the live page-table tree instead of keeping it only
-	// 	 * in a temporary variable.
-	// 	 */
-	// 	//test_entry = __p4d(pa | _PAGE_TABLE);
-	// 	//test_entry = p4d_mk_next_flattened(test_entry);
-
-	// 	pr_info("flat_l3l2: allocated 2MB flattened node at %p (pa=%pa)\n",
-	// 		flat_node, &pa);
-
-	// 	spin_lock(&mm->page_table_lock);
-	// 	pr_info("1\n");
-	// 	if (!p4d_present(*p4d)) {
-	// 		pr_info("2\n");
-	// 		mm_inc_nr_puds(mm);
-	// 		pr_info("3\n");
-	// 		smp_wmb(); /* keep ordering consistent with normal install path */
-	// 		pr_info("4\n");
-	// 		p4d_populate(mm, p4d, flat_node);
-			
-	// 		//WRITE_ONCE(*p4d, pa);
-			
-	// 		pr_info("flat_l3l2: installed experimental flattened entry into real *p4d\n");
-	// 		pr_info("flat_l3l2: real installed flattened bit = %d\n",
-	// 			p4d_next_is_flattened(READ_ONCE(*p4d)));
-	// 		pr_info("flat_l3l2: real installed p4d value = 0x%llx\n",
-	// 			(unsigned long long)p4d_val(READ_ONCE(*p4d)));
-	// 	} else {
-	// 		pr_info("flat_l3l2: parent already populated, freeing experimental node\n");
-	// 		spin_unlock(&mm->page_table_lock);
-	// 		flat_l3l2_free_node(flat_node);
-	// 		flat_l3l2_hook_done = true;
-	// 		return -ENOMEM;
-	// 	}
-
-	// 	spin_unlock(&mm->page_table_lock);
-
-	// 	flat_l3l2_hook_done = true;
-
-	// 	return 0; // hopefully this works! 
-	
-	//pud_t *new = pud_alloc_one(mm, address);
 	struct page *new_page;
 	pud_t *new;
-	pr_info("Allocating 2 MB node in __pud_alloc...\n");
+	//pr_info("Allocating 2 MB node in __pud_alloc...\n");
 	new_page = alloc_pages(GFP_KERNEL, 9);
 	memset(page_address(new_page), 0, 2097152);
 
 	if (!new_page)	{
-		pr_info("Allocation failed\n");
+		pr_info("2MB Allocation failed\n");
 		return -ENOMEM;
 	}
 	split_page(new_page, 9);
 	for (int i = 0; i < 512; i++) {
 		struct page *p = new_page + i;
 		p->flags &= ~(1UL << PG_reserved);
+		if (i == 0) // Set the PG_arch_1 bit high, but only in the shim table
+			set_bit(13, &p->flags); //should be PG_arch
+		else
+			clear_bit(13, &p->flags);
 		pagetable_pmd_ctor(page_ptdesc(p)); // Initialize the lock for each 4KB slice
 	}
 	// Set some pointers, so the hardware doesn't break (it expects a tree with a 4 kB layer here)
@@ -6832,19 +6756,15 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 	for (int i = 0; i < 512; i++) {
     struct page *p = new_page + i;
     
-    // 1. Clear any old flags
+    //Clear old flags
     p->flags &= ~PAGE_FLAGS_CHECK_AT_PREP; 
     
-    // 2. Initialize the spinlock for this 4KB slice
-    // Use 'pagetable_pmd_ctor' or 'pgtable_pmd_page_ctor' depending on your version
-    // If it fails to compile, use the one that worked earlier
+    //Constructor needed for spinlock
     pagetable_pmd_ctor(page_ptdesc(p));
 }
 	shim_table[511] = ((pfn_base + 512) << PAGE_SHIFT) | _PAGE_TABLE | _PAGE_USER;
 
-	//old:
-	//new = (pud_t *)shim_table;
-	//edit:
+	
 	new = (pud_t *)page_address(new_page);  
 	
 	spin_lock(&mm->page_table_lock);
@@ -6858,23 +6778,6 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 	spin_unlock(&mm->page_table_lock);
 	native_flush_tlb_global();
 	return 0;
-	//}
-
-	//Normal allocation, a 4 kb node 
-	// For now, try 2 MB all the time
-	// pud_t *new = pud_alloc_one(mm, address);
-	// if (!new)
-	// 	return -ENOMEM;
-
-	// spin_lock(&mm->page_table_lock);
-	// if (!p4d_present(*p4d)) {
-	// 	mm_inc_nr_puds(mm);
-	// 	smp_wmb(); /* See comment in pmd_install() */
-	// 	p4d_populate(mm, p4d, new);
-	// } else	/* Another has populated it */
-	// 	pud_free(mm, new);
-	// spin_unlock(&mm->page_table_lock);
-	// return 0;
 }
 
 #endif /* __PAGETABLE_PUD_FOLDED */
