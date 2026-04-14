@@ -5021,6 +5021,37 @@ fallback:
 	return folio_prealloc(vma->vm_mm, vma, vmf->address, true);
 }
 
+//verification!
+static void debug_dump_flattened_node(struct mm_struct *mm, unsigned long address)
+{
+	pgd_t *pgd; p4d_t *p4d; pud_t *pud; pmd_t *pmd;
+	unsigned long pud_phys, first_shim_entry;
+
+	pgd = pgd_offset(mm, address);
+	if (pgd_none(*pgd)) return;
+	p4d = p4d_offset(pgd, address);
+	if (p4d_none(*p4d)) return;
+	pud = pud_offset(p4d, address);
+	if (pud_none(*pud)) return;
+
+	pud_phys = pud_val(*pud) & 0x000ffffffffff000;
+	// Read what the hardware sees in the shim
+	first_shim_entry = *(unsigned long *)__va(pud_phys);
+
+	pr_info("are we flattening????\n");
+	pr_info("VADDR: %lx | PUD points to shim at: %lx\n", address, pud_phys);
+	pr_info("shim[0] points to: %lx (PFN %lx)\n", first_shim_entry, first_shim_entry >> 12);
+
+	// Get the PMD
+	pmd = pmd_offset(pud, address);
+	pr_info("Software PMD pointer: %p (Phys: %lx)\n", pmd, (unsigned long)__pa(pmd));
+	pr_info("pud physical address:: %lx\n", pud_phys);
+	
+	if ((unsigned long)__pa(pmd) == pud_phys + 4096) {
+		pr_info("Shim points as expected.\n");
+	}
+}
+
 /*
  * We enter with non-exclusive mmap_lock (to exclude vma changes,
  * but allow concurrent faults), and pte mapped but not yet locked.
@@ -5144,6 +5175,9 @@ unlock:
 		//pte_unmap_unlock(vmf->pte, vmf->ptl);
 		pte_unmap(vmf->pte);
 		spin_unlock(vmf->ptl);
+	}
+	if (vmf->address == 0x7ffff7ff0000) {
+		debug_dump_flattened_node(vma->vm_mm, vmf->address);
 	}
 	return ret;
 release:
@@ -6729,55 +6763,110 @@ int __p4d_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address)
 
 int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 {
-	struct page *new_page;
-	pud_t *new;
-	//pr_info("Allocating 2 MB node in __pud_alloc...\n");
-	new_page = alloc_pages(GFP_KERNEL, 9);
-	memset(page_address(new_page), 0, 2097152);
+// 	struct page *new_page;
+// 	pud_t *new;
+// 	//pr_info("Allocating 2 MB node in __pud_alloc...\n");
+// 	new_page = alloc_pages(GFP_KERNEL, 9);
+// 	memset(page_address(new_page), 0, 2097152);
 
-	if (!new_page)	{
-		pr_info("2MB Allocation failed\n");
-		return -ENOMEM;
-	}
-	split_page(new_page, 9);
-	for (int i = 0; i < 512; i++) {
-		struct page *p = new_page + i;
-		p->flags &= ~(1UL << PG_reserved);
-		if (i == 0) // Set the PG_arch_1 bit high, but only in the shim table
-			set_bit(13, &p->flags); //should be PG_arch
-		else
-			clear_bit(13, &p->flags);
-		pagetable_pmd_ctor(page_ptdesc(p)); // Initialize the lock for each 4KB slice
-	}
-	// Set some pointers, so the hardware doesn't break (it expects a tree with a 4 kB layer here)
-	volatile unsigned long *shim_table = (unsigned long *)page_address(new_page);
-	unsigned long pfn_base = page_to_pfn(new_page);
+// 	if (!new_page)	{
+// 		pr_info("2MB Allocation failed\n");
+// 		return -ENOMEM;
+// 	}
+// 	split_page(new_page, 9);
+// 	for (int i = 0; i < 512; i++) {
+// 		struct page *p = new_page + i;
+// 		p->flags &= ~(1UL << PG_reserved);
+// 		if (i == 0) // Set the PG_arch_1 bit high, but only in the shim table
+// 			set_bit(13, &p->flags); //should be PG_arch
+// 		else
+// 			clear_bit(13, &p->flags);
+// 		pagetable_pmd_ctor(page_ptdesc(p)); // Initialize the lock for each 4KB slice
+// 	}
 
-	for (int i = 0; i < 512; i++) {
-    struct page *p = new_page + i;
+
+// 	// Set some pointers, so the hardware doesn't break (it expects a tree with a 4 kB layer here)
+// 	volatile unsigned long *shim_table = (unsigned long *)page_address(new_page);
+// 	unsigned long pfn_base = page_to_pfn(new_page);
+
+// 	for (int i = 0; i < 512; i++) {
+//     struct page *p = new_page + i;
     
-    //Clear old flags
-    p->flags &= ~PAGE_FLAGS_CHECK_AT_PREP; 
+//     //Clear old flags
+//     p->flags &= ~PAGE_FLAGS_CHECK_AT_PREP; 
     
-    //Constructor needed for spinlock
-    pagetable_pmd_ctor(page_ptdesc(p));
-}
-	shim_table[511] = ((pfn_base + 512) << PAGE_SHIFT) | _PAGE_TABLE | _PAGE_USER;
+//     //Constructor needed for spinlock
+//     pagetable_pmd_ctor(page_ptdesc(p));
+// }
+
+// 	shim_table[511] = ((pfn_base + 512) << PAGE_SHIFT) | _PAGE_TABLE | _PAGE_USER;
 
 	
-	new = (pud_t *)page_address(new_page);  
+// 	new = (pud_t *)page_address(new_page);  
 	
-	spin_lock(&mm->page_table_lock);
-	if (!p4d_present(*p4d)) {
-		mm_inc_nr_puds(mm);
-		smp_wmb(); /* See comment in pmd_install() */
-		//p4d_populate(mm, p4d, new);
-		set_p4d(p4d, __p4d(__pa(new) | _PAGE_TABLE | _PAGE_USER));
-	} else	/* Another has populated it */
-		__free_pages(new_page, 9); 
-	spin_unlock(&mm->page_table_lock);
-	native_flush_tlb_global();
-	return 0;
+// 	spin_lock(&mm->page_table_lock);
+// 	if (!p4d_present(*p4d)) {
+// 		mm_inc_nr_puds(mm);
+// 		smp_wmb(); /* See comment in pmd_install() */
+// 		//p4d_populate(mm, p4d, new);
+// 		set_p4d(p4d, __p4d(__pa(new) | _PAGE_TABLE | _PAGE_USER));
+// 	} else	/* Another has populated it */
+// 		__free_pages(new_page, 9); 
+// 	spin_unlock(&mm->page_table_lock);
+// 	native_flush_tlb_global();
+// 	return 0;
+struct page *new_page;
+    pud_t *new;
+    
+    /* 1. Allocate and immediately zero the full 2MB */
+    new_page = alloc_pages(GFP_KERNEL, 9);
+    if (!new_page) return -ENOMEM;
+    memset(page_address(new_page), 0, 2097152);
+
+    /* 2. Split and initialize ONLY what is necessary */
+    split_page(new_page, 9);
+    
+    for (int i = 0; i < 512; i++) {
+        struct page *p = new_page + i;
+        
+        /* Clear everything that might trigger a 'Bad Page' panic */
+        p->flags &= ~(1UL << PG_reserved);
+        
+        /* IMPORTANT: Only tag the VERY FIRST page with bit 13 */
+        if (i == 0) 
+            set_bit(13, &p->flags); 
+        else
+            clear_bit(13, &p->flags);
+            
+        /* Use the constructor just once per slice */
+        pagetable_pmd_ctor(page_ptdesc(p));
+    }
+
+    /* 3. Setup the shim table values */
+    volatile unsigned long *shim_table = (unsigned long *)page_address(new_page);
+    unsigned long pfn_base = page_to_pfn(new_page);
+
+    for (int i = 0; i < 512; i++) {
+        unsigned long target_pfn = pfn_base + i + 1;
+        shim_table[i] = (target_pfn << PAGE_SHIFT) | _PAGE_TABLE | _PAGE_USER;
+    }
+
+    new = (pud_t *)page_address(new_page);  
+    
+    /* 4. Use the global lock to prevent the 'virt_spin_lock' hang */
+    spin_lock(&mm->page_table_lock);
+    if (!p4d_present(*p4d)) {
+        mm_inc_nr_puds(mm);
+        smp_wmb();
+        set_p4d(p4d, __p4d(__pa(new) | _PAGE_TABLE | _PAGE_USER));
+    } else {
+        /* Cleanup path if another CPU won the race */
+        __free_pages(new_page, 9); 
+    }
+    spin_unlock(&mm->page_table_lock);
+    
+    native_flush_tlb_global();
+    return 0;
 }
 
 #endif /* __PAGETABLE_PUD_FOLDED */
@@ -7543,3 +7632,6 @@ void vma_pgtable_walk_end(struct vm_area_struct *vma)
 	if (is_vm_hugetlb_page(vma))
 		hugetlb_vma_unlock_read(vma);
 }
+
+
+
