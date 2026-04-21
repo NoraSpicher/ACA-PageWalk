@@ -26,40 +26,23 @@ void ___pte_free_tlb(struct mmu_gather *tlb, struct page *pte)
 #if CONFIG_PGTABLE_LEVELS > 2
 void ___pmd_free_tlb(struct mmu_gather *tlb, pmd_t *pmd)
 {
-	// Since we are flattening pmd, we just return.
-	return;
+	//Need to add case for when these are flattened, find it differently 
 	// Normal pmd free logic:
-// 	paravirt_release_pmd(__pa(pmd) >> PAGE_SHIFT);
-// 	/*
-// 	 * NOTE! For PAE, any changes to the top page-directory-pointer-table
-// 	 * entries need a full cr3 reload to flush.
-// 	 */
-// #ifdef CONFIG_X86_PAE
-// 	tlb->need_flush_all = 1;
-// #endif
-// 	tlb_remove_ptdesc(tlb, virt_to_ptdesc(pmd));
+	paravirt_release_pmd(__pa(pmd) >> PAGE_SHIFT);
+	/*
+	 * NOTE! For PAE, any changes to the top page-directory-pointer-table
+	 * entries need a full cr3 reload to flush.
+	 */
+#ifdef CONFIG_X86_PAE
+	tlb->need_flush_all = 1;
+#endif
+	tlb_remove_ptdesc(tlb, virt_to_ptdesc(pmd));
 }
 
 #if CONFIG_PGTABLE_LEVELS > 3
 void ___pud_free_tlb(struct mmu_gather *tlb, pud_t *pud)
 {
-    struct page *page = virt_to_page(pud);
-
-    // Check bit 13 (PG_arch_1) manually 
-    if (test_bit(13, &page->flags)) {
-        clear_bit(13, &page->flags);
-        
-        // for (int i = 0; i < 512; i++) {
-        //     /* Using the exact same wrapping logic as your ctor */
-        //     pgtable_pmd_page_dtor(page_ptdesc(page+1)); //Should really add this back in, but I cant get it to compile
-        // }
-        
-        paravirt_release_pud(__pa(pud) >> PAGE_SHIFT);
-        __free_pages(page, 9);
-        return;
-    }
-
-    //Then this is what happens if we aren't using the shim table (I think only during startup)
+    //Need to add
     paravirt_release_pud(__pa(pud) >> PAGE_SHIFT);
     tlb_remove_ptdesc(tlb, virt_to_ptdesc(pud));
 }

@@ -475,9 +475,8 @@ void free_pgtables(struct mmu_gather *tlb, struct ma_state *mas,
 
 void pmd_install(struct mm_struct *mm, pmd_t *pmd, pgtable_t *pte)
 {
-	//spinlock_t *ptl = pmd_lock(mm, pmd);
-	spinlock_t *ptl = &mm->page_table_lock;
-	spin_lock(ptl);
+	spinlock_t *ptl = pmd_lock(mm, pmd);
+	
 	if (likely(pmd_none(*pmd))) {	/* Has another populated it ? */
 		mm_inc_nr_ptes(mm);
 		/*
@@ -1883,9 +1882,8 @@ static inline unsigned long zap_pmd_range(struct mmu_gather *tlb,
 		} else if (details && details->single_folio &&
 			   folio_test_pmd_mappable(details->single_folio) &&
 			   next - addr == HPAGE_PMD_SIZE && pmd_none(*pmd)) {
-			//spinlock_t *ptl = pmd_lock(tlb->mm, pmd);
-			spinlock_t *ptl = &tlb->mm->page_table_lock;
-			spin_lock(ptl);
+			spinlock_t *ptl = pmd_lock(tlb->mm, pmd);
+			
 			
 			/*
 			 * Take and drop THP pmd lock so that we cannot return
@@ -5084,11 +5082,9 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 						vma->vm_page_prot));
 
 		//Bypass locks
-		// vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
-		// 		vmf->address, &vmf->ptl);
-		vmf->pte = pte_offset_map(vmf->pmd, vmf->address);
-		vmf->ptl = &vma->vm_mm->page_table_lock;
-		spin_lock(vmf->ptl);
+		vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
+				vmf->address, &vmf->ptl);
+		
 		if (!vmf->pte)
 			goto unlock;
 		if (vmf_pte_changed(vmf)) {
@@ -5100,9 +5096,8 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 			goto unlock;
 		/* Deliver the page fault to userland, check inside PT lock */
 		if (userfaultfd_missing(vma)) {
-			//pte_unmap_unlock(vmf->pte, vmf->ptl);
-			pte_unmap(vmf->pte);
-			spin_unlock(vmf->ptl);
+			pte_unmap_unlock(vmf->pte, vmf->ptl);
+
 			return handle_userfault(vmf, VM_UFFD_MISSING);
 		}
 		goto setpte;
@@ -5151,9 +5146,7 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 
 	/* Deliver the page fault to userland, check inside PT lock */
 	if (userfaultfd_missing(vma)) {
-		//pte_unmap_unlock(vmf->pte, vmf->ptl);
-		pte_unmap(vmf->pte);
-		spin_unlock(vmf->ptl);
+		pte_unmap_unlock(vmf->pte, vmf->ptl);
 		folio_put(folio);
 		return handle_userfault(vmf, VM_UFFD_MISSING);
 	}
@@ -5172,9 +5165,8 @@ setpte:
 	update_mmu_cache_range(vmf, vma, addr, vmf->pte, nr_pages);
 unlock:
 	if (vmf->pte){
-		//pte_unmap_unlock(vmf->pte, vmf->ptl);
-		pte_unmap(vmf->pte);
-		spin_unlock(vmf->ptl);
+		pte_unmap_unlock(vmf->pte, vmf->ptl);
+
 	}
 	if (vmf->address == 0x7ffff7ff0000) {
 		debug_dump_flattened_node(vma->vm_mm, vmf->address);
@@ -5306,9 +5298,7 @@ vm_fault_t do_set_pmd(struct vm_fault *vmf, struct page *page)
 			return VM_FAULT_OOM;
 	}
 
-	//vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
-	vmf->ptl = &vmf->vma->vm_mm->page_table_lock;
-	spin_lock(vmf->ptl);
+	vmf->ptl = pmd_lock(vma->vm_mm, vmf->pmd);
 	if (unlikely(!pmd_none(*vmf->pmd)))
 		goto out;
 
@@ -6815,7 +6805,7 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 // 	spin_unlock(&mm->page_table_lock);
 // 	native_flush_tlb_global();
 // 	return 0;
-struct page *new_page;
+	struct page *new_page;
     pud_t *new;
     
     /* 1. Allocate and immediately zero the full 2MB */
@@ -7022,9 +7012,7 @@ retry:
 	pmdp = pmd_offset(pudp, address);
 	pmd = pmdp_get_lockless(pmdp);
 	if (pmd_leaf(pmd)) {
-		//lock = pmd_lock(mm, pmdp);
-		lock = &mm->page_table_lock;
-		spin_lock(lock);
+		lock = pmd_lock(mm, pmdp);
 
 		if (!unlikely(pmd_leaf(pmd))) {
 			spin_unlock(lock);
