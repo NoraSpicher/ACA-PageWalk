@@ -27,17 +27,13 @@ void pud_free_tlb_flattened(struct mmu_gather *tlb,
                            pud_t *pud,
                            unsigned long address)
 {
-	//hopefully, this access works here 
-	struct mm_struct *mm = tlb->mm;
-    pgd_t *pgd = pgd_offset(mm, address);
-    p4d_t *p4d = p4d_offset(pgd, address); // find p4d 
-
-    if (p4d_val(*p4d) & _PAGE_FLAT_NEXT) { //check if its flattened, so we know how much to free 
+	struct page *page = virt_to_page(pud);
+    if (test_bit(PG_arch_1, &page->flags)) { //check if its flattened, so we know how much to free 
         struct page *page = virt_to_page(pud);
         __free_pages(page, 9);
         return;
     }
-
+	
     ___pud_free_tlb(tlb, pud); // otherwise, just call the normal function 
 }
 
