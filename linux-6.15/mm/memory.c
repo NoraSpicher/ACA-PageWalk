@@ -6761,6 +6761,7 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
     //Allocate and immediately zero the full 2MB
     new_page = alloc_pages(GFP_KERNEL, 9);
     if (!new_page){
+	// if (true){
 		// Fallback path: 2 MB allocation failed. Try a smaller one. 
 		pud_t *new = pud_alloc_one(mm, address);
 		if (!new){
@@ -6783,12 +6784,16 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 	//my current guess at what a large allocation without the shim table looks like. 
 	memset(page_address(new_page), 0, 2097152);
 	pud_t *new_pud = (pud_t *)page_address(new_page); //just to access it in __p4d
+	pagetable_pud_ctor(virt_to_ptdesc(new_pud)); //hopefully, calls constructor 	
+	//p4d_t entry = __p4d(__pa(new_pud) | _PAGE_TABLE | _PAGE_USER | _PAGE_FLAT_NEXT);
     
 	spin_lock(&mm->page_table_lock);
 	if (!p4d_present(*p4d)) {
 		mm_inc_nr_puds(mm);
 		smp_wmb(); /* See comment in pmd_install() */
-		set_p4d(p4d, __p4d(__pa(new_pud) | _PAGE_TABLE | _PAGE_USER | _PAGE_FLAT_NEXT)); //set flattened bit in parent 
+		//set_p4d(p4d, entry); //set flattened bit in parent. replaces p4d_populate
+		p4d_populate(mm, p4d, new_pud);
+		p4d_mk_next_flattened(*p4d);
 	} else	/* Another has populated it */
 		__free_pages(new_page, 9); 
 	spin_unlock(&mm->page_table_lock);
