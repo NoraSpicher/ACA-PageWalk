@@ -6753,110 +6753,102 @@ int __p4d_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address)
 
 int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 {
-// 	struct page *new_page;
-// 	pud_t *new;
-// 	//pr_info("Allocating 2 MB node in __pud_alloc...\n");
-// 	new_page = alloc_pages(GFP_KERNEL, 9);
-// 	memset(page_address(new_page), 0, 2097152);
 
-// 	if (!new_page)	{
-// 		pr_info("2MB Allocation failed\n");
-// 		return -ENOMEM;
-// 	}
-// 	split_page(new_page, 9);
-// 	for (int i = 0; i < 512; i++) {
-// 		struct page *p = new_page + i;
-// 		p->flags &= ~(1UL << PG_reserved);
-// 		if (i == 0) // Set the PG_arch_1 bit high, but only in the shim table
-// 			set_bit(13, &p->flags); //should be PG_arch
-// 		else
-// 			clear_bit(13, &p->flags);
-// 		pagetable_pmd_ctor(page_ptdesc(p)); // Initialize the lock for each 4KB slice
-// 	}
-
-
-// 	// Set some pointers, so the hardware doesn't break (it expects a tree with a 4 kB layer here)
-// 	volatile unsigned long *shim_table = (unsigned long *)page_address(new_page);
-// 	unsigned long pfn_base = page_to_pfn(new_page);
-
-// 	for (int i = 0; i < 512; i++) {
-//     struct page *p = new_page + i;
-    
-//     //Clear old flags
-//     p->flags &= ~PAGE_FLAGS_CHECK_AT_PREP; 
-    
-//     //Constructor needed for spinlock
-//     pagetable_pmd_ctor(page_ptdesc(p));
-// }
-
-// 	shim_table[511] = ((pfn_base + 512) << PAGE_SHIFT) | _PAGE_TABLE | _PAGE_USER;
-
-	
-// 	new = (pud_t *)page_address(new_page);  
-	
-// 	spin_lock(&mm->page_table_lock);
-// 	if (!p4d_present(*p4d)) {
-// 		mm_inc_nr_puds(mm);
-// 		smp_wmb(); /* See comment in pmd_install() */
-// 		//p4d_populate(mm, p4d, new);
-// 		set_p4d(p4d, __p4d(__pa(new) | _PAGE_TABLE | _PAGE_USER));
-// 	} else	/* Another has populated it */
-// 		__free_pages(new_page, 9); 
-// 	spin_unlock(&mm->page_table_lock);
-// 	native_flush_tlb_global();
-// 	return 0;
+	// Modified version to pull from later:
 	struct page *new_page;
-    pud_t *new;
     
-    /* 1. Allocate and immediately zero the full 2MB */
+    
+    //Allocate and immediately zero the full 2MB
     new_page = alloc_pages(GFP_KERNEL, 9);
-    if (!new_page) return -ENOMEM;
-    memset(page_address(new_page), 0, 2097152);
+    if (!new_page){
+		// Fallback path: 2 MB allocation failed. Try a smaller one. 
+		pud_t *new = pud_alloc_one(mm, address);
+		if (!new){
+			return -ENOMEM;//for real this time 
+		}
+		spin_lock(&mm->page_table_lock);
+		if (!p4d_present(*p4d)) {
+			mm_inc_nr_puds(mm);
+			smp_wmb(); /* See comment in pmd_install() */
+			p4d_populate(mm, p4d, new);
+		} else	/* Another has populated it */
+			pud_free(mm, new);
+		spin_unlock(&mm->page_table_lock);
+		return 0;
+	}
+	// Large allocation path 
 
-    /* 2. Split and initialize ONLY what is necessary */
-    split_page(new_page, 9);
+	
+
+	//my current guess at what a large allocation without the shim table looks like. 
+	memset(page_address(new_page), 0, 2097152);
+	pud_t *new_pud = (pud_t *)page_address(new_page); //just to access it in __p4d
     
-    for (int i = 0; i < 512; i++) {
-        struct page *p = new_page + i;
+	spin_lock(&mm->page_table_lock);
+	if (!p4d_present(*p4d)) {
+		mm_inc_nr_puds(mm);
+		smp_wmb(); /* See comment in pmd_install() */
+		set_p4d(p4d, __p4d(__pa(new_pud) | _PAGE_TABLE | _PAGE_USER | _PAGE_FLAT_NEXT)); //set flattened bit in parent 
+	} else	/* Another has populated it */
+		__free_pages(new_page, 9); 
+	spin_unlock(&mm->page_table_lock);
+	return 0;
+
+	
+	
+	// Modified version to pull from later:
+	// struct page *new_page;
+    // pud_t *new;
+    
+    // //Allocate and immediately zero the full 2MB
+    // new_page = alloc_pages(GFP_KERNEL, 9);
+    // if (!new_page) return -ENOMEM;
+    // memset(page_address(new_page), 0, 2097152);
+
+    // //Split and initialize ONLY what is necessary
+    // split_page(new_page, 9);
+    
+    // for (int i = 0; i < 512; i++) {
+    //     struct page *p = new_page + i;
         
-        /* Clear everything that might trigger a 'Bad Page' panic */
-        p->flags &= ~(1UL << PG_reserved);
+    //     //Clear everything that might trigger a 'Bad Page' panic
+    //     p->flags &= ~(1UL << PG_reserved);
         
-        /* IMPORTANT: Only tag the VERY FIRST page with bit 13 */
-        if (i == 0) 
-            set_bit(13, &p->flags); 
-        else
-            clear_bit(13, &p->flags);
+    //     //misguided idea, just use the flag bits from before idiot 
+    //     if (i == 0) 
+    //         set_bit(13, &p->flags); 
+    //     else
+    //         clear_bit(13, &p->flags);
             
-        /* Use the constructor just once per slice */
-        pagetable_pmd_ctor(page_ptdesc(p));
-    }
+    //     // Needs to change, the pmd constructor shouldn't be used on the first slice, and we need the pud constructor isntead
+    //     pagetable_pmd_ctor(page_ptdesc(p));
+    // }
 
-    /* 3. Setup the shim table values */
-    volatile unsigned long *shim_table = (unsigned long *)page_address(new_page);
-    unsigned long pfn_base = page_to_pfn(new_page);
+    // //Shim table setup. Inspect closely 
+    // volatile unsigned long *shim_table = (unsigned long *)page_address(new_page);
+    // unsigned long pfn_base = page_to_pfn(new_page);
 
-    for (int i = 0; i < 512; i++) {
-        unsigned long target_pfn = pfn_base + i + 1;
-        shim_table[i] = (target_pfn << PAGE_SHIFT) | _PAGE_TABLE | _PAGE_USER;
-    }
+    // for (int i = 0; i < 512; i++) {
+    //     unsigned long target_pfn = pfn_base + i + 1;
+    //     shim_table[i] = (target_pfn << PAGE_SHIFT) | _PAGE_TABLE | _PAGE_USER;
+    // }
 
-    new = (pud_t *)page_address(new_page);  
+    // new = (pud_t *)page_address(new_page);  
     
-    /* 4. Use the global lock to prevent the 'virt_spin_lock' hang */
-    spin_lock(&mm->page_table_lock);
-    if (!p4d_present(*p4d)) {
-        mm_inc_nr_puds(mm);
-        smp_wmb();
-        set_p4d(p4d, __p4d(__pa(new) | _PAGE_TABLE | _PAGE_USER));
-    } else {
-        /* Cleanup path if another CPU won the race */
-        __free_pages(new_page, 9); 
-    }
-    spin_unlock(&mm->page_table_lock);
+    // // This is almost certainly evil 
+    // spin_lock(&mm->page_table_lock);
+    // if (!p4d_present(*p4d)) {
+    //     mm_inc_nr_puds(mm);
+    //     smp_wmb();
+    //     set_p4d(p4d, __p4d(__pa(new) | _PAGE_TABLE | _PAGE_USER));
+    // } else {
+    //     /* Cleanup path if another CPU won the race */
+    //     __free_pages(new_page, 9); 
+    // }
+    // spin_unlock(&mm->page_table_lock);
     
-    native_flush_tlb_global();
-    return 0;
+    // native_flush_tlb_global();
+    // return 0;
 }
 
 #endif /* __PAGETABLE_PUD_FOLDED */

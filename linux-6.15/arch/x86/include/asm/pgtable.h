@@ -1238,38 +1238,40 @@ static inline p4d_t *p4d_offset(pgd_t *pgd, unsigned long address)
 		return (p4d_t *)pgd;
 	return (p4d_t *)pgd_page_vaddr(*pgd) + p4d_index(address);
 }
-#undef pmd_offset
-static inline pmd_t *pmd_offset(pud_t *pud, unsigned long address)
-{
-    unsigned long pud_val = pud_val(*pud);
-    unsigned long phys_addr = pud_val & 0x000ffffffffff000;
-    unsigned long *pud_ptr;
 
-    // for when we are in kernel space
-    if ((long)address < 0 || !(pud_val & _PAGE_PRESENT)) {
-        return (pmd_t *)((unsigned long)__va(phys_addr) + (((address >> 21) & 511) * 8));
-    }
+// pmd offset for when shim is reintroduced 
+// #undef pmd_offset
+// static inline pmd_t *pmd_offset(pud_t *pud, unsigned long address)
+// {
+//     unsigned long pud_val = pud_val(*pud);
+//     unsigned long phys_addr = pud_val & 0x000ffffffffff000;
+//     unsigned long *pud_ptr;
 
-    //Find the pointer
-    pud_ptr = (unsigned long *)__va(phys_addr);
+//     // for when we are in kernel space
+//     if ((long)address < 0 || !(pud_val & _PAGE_PRESENT)) {
+//         return (pmd_t *)((unsigned long)__va(phys_addr) + (((address >> 21) & 511) * 8));
+//     }
 
-    //Check to make sure this is flattened for real use. Kinda jank, but hopefully better
-	//Seems to crash less often! Probably should move to PG_arch flag though
-    if (pud_ptr != 0) {
-        unsigned long entry0 = *(volatile unsigned long *)pud_ptr;
-        unsigned long entry511 = *(volatile unsigned long *)(pud_ptr + 511);
-        unsigned long base_pfn = phys_addr >> 12;
+//     //Find the pointer
+//     pud_ptr = (unsigned long *)__va(phys_addr);
 
-        if (((entry0 >> 12) == base_pfn + 1) && ((entry511 >> 12) == base_pfn + 512)) {
-			//Do the shim table logic
-             return (pmd_t *)((unsigned long)__va(phys_addr) + 4096 + (((address >> 21) & 511) * 8));
-        }
-    }
+//     //Check to make sure this is flattened for real use. Kinda jank, but hopefully better
+// 	//Seems to crash less often! Probably should move to PG_arch flag though
+//     if (pud_ptr != 0) {
+//         unsigned long entry0 = *(volatile unsigned long *)pud_ptr;
+//         unsigned long entry511 = *(volatile unsigned long *)(pud_ptr + 511);
+//         unsigned long base_pfn = phys_addr >> 12;
 
-    //for early use in startup, regular 4 kB table
-    return (pmd_t *)((unsigned long)__va(phys_addr) + (((address >> 21) & 511) * 8));
-}
-#define pmd_offset pmd_offset
+//         if (((entry0 >> 12) == base_pfn + 1) && ((entry511 >> 12) == base_pfn + 512)) {
+// 			//Do the shim table logic
+//              return (pmd_t *)((unsigned long)__va(phys_addr) + 4096 + (((address >> 21) & 511) * 8));
+//         }
+//     }
+
+//     //for early use in startup, regular 4 kB table
+//     return (pmd_t *)((unsigned long)__va(phys_addr) + (((address >> 21) & 511) * 8));
+// }
+// #define pmd_offset pmd_offset
 
 
 static inline int pgd_bad(pgd_t pgd)

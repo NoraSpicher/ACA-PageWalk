@@ -12,6 +12,7 @@
 #define __HAVE_ARCH_PGD_FREE
 #include <asm-generic/pgalloc.h>
 
+
 static inline int  __paravirt_pgd_alloc(struct mm_struct *mm) { return 0; }
 
 #ifdef CONFIG_PARAVIRT_XXL
@@ -150,12 +151,29 @@ static inline void p4d_populate_safe(struct mm_struct *mm, p4d_t *p4d, pud_t *pu
 	set_p4d_safe(p4d, __p4d(_PAGE_TABLE | __pa(pud)));
 }
 
+void pud_free_tlb_flattened(struct mmu_gather *tlb,
+                           pud_t *pud,
+                           unsigned long address);
+
 extern void ___pud_free_tlb(struct mmu_gather *tlb, pud_t *pud);
 
 static inline void __pud_free_tlb(struct mmu_gather *tlb, pud_t *pud,
 				  unsigned long address)
 {
-	___pud_free_tlb(tlb, pud);
+	pud_free_tlb_flattened(tlb, pud, address);
+	//adding flattening detection here, where address is still available 
+	// struct mm_struct *mm = tlb->mm; //first, use the address to find p4d, which needs a chain of accesses 
+	// pgd_t *pgd = pgd_offset(mm, address); 
+	// p4d_t *p4d = p4d_offset(pgd, address);
+
+	// if (p4d_next_is_flattened(*p4d)) {
+	// 	struct page *page = virt_to_page(pud); //bypass call to ___pud_free_tlb, which is for the normal path 
+	// 	VM_BUG_ON_PAGE(compound_order(page) != 9, page); // check if we are getting this wrong ever
+	// 	__free_pages(page, 9);
+	// 	return;
+	// }
+	// //fallback for normal operation 
+	// ___pud_free_tlb(tlb, pud);
 }
 
 #if CONFIG_PGTABLE_LEVELS > 4
