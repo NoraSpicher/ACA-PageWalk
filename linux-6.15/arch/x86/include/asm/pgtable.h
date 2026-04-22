@@ -2,6 +2,7 @@
 #ifndef _ASM_X86_PGTABLE_H
 #define _ASM_X86_PGTABLE_H
 
+
 #include <linux/mem_encrypt.h>
 #include <asm/page.h>
 #include <asm/pgtable_types.h>
@@ -1239,37 +1240,40 @@ static inline p4d_t *p4d_offset(pgd_t *pgd, unsigned long address)
 	return (p4d_t *)pgd_page_vaddr(*pgd) + p4d_index(address);
 }
 
-// pmd offset for when shim is reintroduced 
+// redefining pmd_offset is too sensitive. Need to intercept it before calls instead. 
+
+//helper functions for flattening 
+bool pud_is_flattened(pud_t *pud);
+pmd_t *pmd_offset_flattened(pud_t *pud, unsigned long addr);
+
 // #undef pmd_offset
 // static inline pmd_t *pmd_offset(pud_t *pud, unsigned long address)
 // {
 //     unsigned long pud_val = pud_val(*pud);
-//     unsigned long phys_addr = pud_val & 0x000ffffffffff000;
-//     unsigned long *pud_ptr;
+//     unsigned long phys_addr = pud_val & 0x000ffffffffff000; // I am pretty sure this is the physical mask for this layer 
 
-//     // for when we are in kernel space
-//     if ((long)address < 0 || !(pud_val & _PAGE_PRESENT)) {
-//         return (pmd_t *)((unsigned long)__va(phys_addr) + (((address >> 21) & 511) * 8));
-//     }
 
-//     //Find the pointer
-//     pud_ptr = (unsigned long *)__va(phys_addr);
+// 	//guard is not really working, need to add helper elsewhere. Sad. 
+//     #ifdef __BOOT_COMPRESSED
+// 	//early bootup stuff, doesn't have access to our flag definition, but also doesn't need it
+// 	return (pmd_t *)((unsigned long)__va(phys_addr) + (index * sizeof(pmd_t)));
+// 	#else
 
-//     //Check to make sure this is flattened for real use. Kinda jank, but hopefully better
-// 	//Seems to crash less often! Probably should move to PG_arch flag though
-//     if (pud_ptr != 0) {
-//         unsigned long entry0 = *(volatile unsigned long *)pud_ptr;
-//         unsigned long entry511 = *(volatile unsigned long *)(pud_ptr + 511);
-//         unsigned long base_pfn = phys_addr >> 12;
 
-//         if (((entry0 >> 12) == base_pfn + 1) && ((entry511 >> 12) == base_pfn + 512)) {
-// 			//Do the shim table logic
-//              return (pmd_t *)((unsigned long)__va(phys_addr) + 4096 + (((address >> 21) & 511) * 8));
-//         }
-//     }
+// 	struct page *page = virt_to_page(__va(phys_addr));
+// 	unsigned long index = (address >> 21) & 511; 
 
-//     //for early use in startup, regular 4 kB table
-//     return (pmd_t *)((unsigned long)__va(phys_addr) + (((address >> 21) & 511) * 8));
+
+// 	if (test_bit(PG_arch_1, &page->flags)){ //If marked flattened (with PG_arch_1)
+
+// 		//Do the shim table logic
+// 			return (pmd_t *)((unsigned long)__va(phys_addr) + 4096 + (index * sizeof(pmd_t))); // Easier to parse than old version
+// 	}
+
+
+//     //for fallback, regular 4 kB table
+//     return (pmd_t *)((unsigned long)__va(phys_addr) + (index * sizeof(pmd_t)));
+// 	#endif
 // }
 // #define pmd_offset pmd_offset
 
@@ -1883,3 +1887,4 @@ bool arch_is_platform_page(u64 paddr);
 #endif	/* __ASSEMBLER__ */
 
 #endif /* _ASM_X86_PGTABLE_H */
+

@@ -6,6 +6,7 @@
 #include <asm/tlb.h>
 #include <asm/fixmap.h>
 #include <asm/mtrr.h>
+#include <asm/pgtable_types.h>
 
 #ifdef CONFIG_DYNAMIC_PHYSICAL_MASK
 phys_addr_t physical_mask __ro_after_init = (1ULL << __PHYSICAL_MASK_SHIFT) - 1;
@@ -920,4 +921,21 @@ void arch_check_zapped_pud(struct vm_area_struct *vma, pud_t pud)
 {
 	/* See note in arch_check_zapped_pte() */
 	VM_WARN_ON_ONCE(!(vma->vm_flags & VM_SHADOW_STACK) && pud_shstk(pud));
+}
+
+//helper for shim logic 
+bool pud_is_flattened(pud_t *pud)
+{
+    unsigned long phys = pud_val(*pud) & PHYSICAL_PUD_PAGE_MASK;
+    struct page *page = pfn_to_page(phys >> PAGE_SHIFT);
+	// This is just to detect a pud that acts as a shim table 
+    return test_bit(PG_arch_1, &page->flags);
+}
+
+pmd_t *pmd_offset_flattened(pud_t *pud, unsigned long addr)
+{
+    unsigned long phys = pud_val(*pud) & PHYSICAL_PUD_PAGE_MASK;
+    unsigned long index = (addr >> 21) & 511;
+	// This is where the shim offset calculation lives now
+    return (pmd_t *)((unsigned long)__va(phys) + 4096 + index * sizeof(pmd_t));
 }
