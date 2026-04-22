@@ -930,6 +930,7 @@ bool pud_is_flattened(pud_t *pud)
     struct page *page = pfn_to_page(phys >> PAGE_SHIFT);
 	// This is just to detect a pud that acts as a shim table 
     test_bit(PG_arch_1, &page->flags); // return this later. Right now, just making sure it compiles.
+	//pr_info("FLAT: pud check ran, found %s, returning false.\n", flattened ? "true" : "false"); //This does print! 8 million times per second 
 	return false;
 }
 

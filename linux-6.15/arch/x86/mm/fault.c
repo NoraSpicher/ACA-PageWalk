@@ -202,8 +202,28 @@ static inline pmd_t *vmalloc_sync_one(pgd_t *pgd, unsigned long address)
 	if (!pud_present(*pud_k))
 		return NULL;
 
-	pmd = pmd_offset(pud, address);
-	pmd_k = pmd_offset(pud_k, address);
+	//start pmd = pmd_offset(pud, address); replacement
+	// Use helpers here to either use shim logic or not
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, address);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, address);
+	}
+	// End pmd_offset replacement
+	//start pmd_k = pmd_offset(pud_k, address); replacement
+	// Use helpers here to either use shim logic or not
+	if (pud_is_flattened(pud_k)){
+		//shim table!
+		pmd_k = pmd_offset_flattened(pud_k, address);
+	}
+	else{
+		// normal operation
+		pmd_k = pmd_offset(pud_k, address);
+	}
+	// End pmd_offset replacement
 
 	if (pmd_present(*pmd) != pmd_present(*pmd_k))
 		set_pmd(pmd, *pmd_k);
@@ -311,7 +331,17 @@ static void dump_pagetable(unsigned long address)
 #endif
 	p4d = p4d_offset(pgd, address);
 	pud = pud_offset(p4d, address);
-	pmd = pmd_offset(pud, address);
+	//start pmd = pmd_offset(pud, address); replacement
+	// Use helpers here to either use shim logic or not
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, address);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, address);
+	}
+	// End pmd_offset replacement
 	pr_pde("*pde = %0*Lx ", sizeof(*pmd) * 2, (u64)pmd_val(*pmd));
 #undef pr_pde
 
@@ -381,7 +411,17 @@ static void dump_pagetable(unsigned long address)
 	if (!pud_present(*pud) || pud_leaf(*pud))
 		goto out;
 
-	pmd = pmd_offset(pud, address);
+	//start pmd = pmd_offset(pud, address); replacement
+	// Use helpers here to either use shim logic or not
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, address);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, address);
+	}
+	// End pmd_offset replacement
 	if (bad_address(pmd))
 		goto bad;
 
@@ -1020,7 +1060,18 @@ spurious_kernel_fault(unsigned long error_code, unsigned long address)
 	if (pud_leaf(*pud))
 		return spurious_kernel_fault_check(error_code, (pte_t *) pud);
 
-	pmd = pmd_offset(pud, address);
+
+	//start pmd = pmd_offset(pud, address); replacement
+	// Use helpers here to either use shim logic or not
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, address);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, address);
+	}
+	// End pmd_offset replacement
 	if (!pmd_present(*pmd))
 		return 0;
 

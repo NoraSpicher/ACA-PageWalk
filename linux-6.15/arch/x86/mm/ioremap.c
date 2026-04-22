@@ -832,6 +832,16 @@ static inline pmd_t * __init early_ioremap_pmd(unsigned long addr)
 	p4d_t *p4d = p4d_offset(pgd, addr);
 	pud_t *pud = pud_offset(p4d, addr);
 	pmd_t *pmd = pmd_offset(pud, addr);
+	// Not here! Breaks everything
+	// if (pud_is_flattened(pud)){
+	// 	//shim table!
+	// 	pmd = pmd_offset_flattened(pud, addr);
+	// }
+	// else{
+	// 	// normal operation
+	// 	pmd = pmd_offset(pud, addr);
+	// }
+	// // End pmd_offset replacement
 
 	return pmd;
 }

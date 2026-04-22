@@ -260,7 +260,17 @@ static inline void free_pmd_range(struct mmu_gather *tlb, pud_t *pud,
 	unsigned long start;
 
 	start = addr;
-	pmd = pmd_offset(pud, addr);
+	//start pmd = pmd_offset(pud, address); replacement
+	// Use helpers here to either use shim logic or not
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, addr);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, addr);
+	}
+	// End pmd_offset replacement
 	do {
 		next = pmd_addr_end(addr, end);
 		if (pmd_none_or_clear_bad(pmd))
@@ -279,7 +289,18 @@ static inline void free_pmd_range(struct mmu_gather *tlb, pud_t *pud,
 	if (end - 1 > ceiling - 1)
 		return;
 
-	pmd = pmd_offset(pud, start);
+	
+	//start pmd = pmd_offset(pud, address); replacement
+	// Use helpers here to either use shim logic or not
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, start);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, start);
+	}
+	// End pmd_offset replacement
 	pud_clear(pud);
 	pmd_free_tlb(tlb, pmd, start);
 	mm_dec_nr_pmds(tlb->mm);
@@ -556,7 +577,18 @@ static void print_bad_pte(struct vm_area_struct *vma, unsigned long addr,
 	pgd_t *pgd = pgd_offset(vma->vm_mm, addr);
 	p4d_t *p4d = p4d_offset(pgd, addr);
 	pud_t *pud = pud_offset(p4d, addr);
-	pmd_t *pmd = pmd_offset(pud, addr);
+	pmd_t *pmd; 
+	//start pmd = pmd_offset(pud, address); replacement
+	// Use helpers here to either use shim logic or not
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, addr);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, addr);
+	}
+	// End pmd_offset replacement
 	struct address_space *mapping;
 	pgoff_t index;
 	static unsigned long resume;
@@ -1309,7 +1341,18 @@ copy_pmd_range(struct vm_area_struct *dst_vma, struct vm_area_struct *src_vma,
 	dst_pmd = pmd_alloc(dst_mm, dst_pud, addr);
 	if (!dst_pmd)
 		return -ENOMEM;
-	src_pmd = pmd_offset(src_pud, addr);
+	
+	//start pmd = pmd_offset(pud, address); replacement
+	// Use helpers here to either use shim logic or not
+	if (pud_is_flattened(src_pud)){
+		//shim table!
+		src_pmd = pmd_offset_flattened(src_pud, addr);
+	}
+	else{
+		// normal operation
+		src_pmd = pmd_offset(src_pud, addr);
+	}
+	// End pmd_offset replacement
 	do {
 		next = pmd_addr_end(addr, end);
 		if (is_swap_pmd(*src_pmd) || pmd_trans_huge(*src_pmd)
@@ -1868,7 +1911,17 @@ static inline unsigned long zap_pmd_range(struct mmu_gather *tlb,
 	pmd_t *pmd;
 	unsigned long next;
 
-	pmd = pmd_offset(pud, addr);
+	//start pmd = pmd_offset(pud, address); replacement
+		// Use helpers here to either use shim logic or not
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, addr);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, addr);
+	}
+		// End pmd_offset replacement
 	do {
 		next = pmd_addr_end(addr, end);
 		if (is_swap_pmd(*pmd) || pmd_trans_huge(*pmd) || pmd_devmap(*pmd)) {
@@ -3045,7 +3098,17 @@ static int apply_to_pmd_range(struct mm_struct *mm, pud_t *pud,
 		if (!pmd)
 			return -ENOMEM;
 	} else {
-		pmd = pmd_offset(pud, addr);
+		//start pmd = pmd_offset(pud, addr); replacement
+		// Use helpers here to either use shim logic or not
+		if (pud_is_flattened(pud)){
+			//shim table!
+			pmd = pmd_offset_flattened(pud, addr);
+		}
+		else{
+			// normal operation
+			pmd = pmd_offset(pud, addr);
+		}
+		// End pmd_offset replacement
 	}
 	do {
 		next = pmd_addr_end(addr, end);
@@ -5041,7 +5104,17 @@ static void debug_dump_flattened_node(struct mm_struct *mm, unsigned long addres
 	pr_info("shim[0] points to: %lx (PFN %lx)\n", first_shim_entry, first_shim_entry >> 12);
 
 	// Get the PMD
-	pmd = pmd_offset(pud, address);
+	//start pmd = pmd_offset(pud, address); replacement
+	// Use helpers here to either use shim logic or not
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, address);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, address);
+	}
+	// End pmd_offset replacement
 	pr_info("Software PMD pointer: %p (Phys: %lx)\n", pmd, (unsigned long)__pa(pmd));
 	pr_info("pud physical address:: %lx\n", pud_phys);
 	
@@ -7007,7 +7080,18 @@ retry:
 		return 0;
 	}
 
-	pmdp = pmd_offset(pudp, address);
+
+	//start pmd = pmd_offset(pud, address); replacement
+	// Use helpers here to either use shim logic or not
+	if (pud_is_flattened(pudp)){
+		//shim table!
+		pmdp = pmd_offset_flattened(pudp, address);
+	}
+	else{
+		// normal operation
+		pmdp = pmd_offset(pudp, address);
+	}
+	// End pmd_offset replacement
 	pmd = pmdp_get_lockless(pmdp);
 	if (pmd_leaf(pmd)) {
 		lock = pmd_lock(mm, pmdp);
