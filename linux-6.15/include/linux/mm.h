@@ -3023,8 +3023,24 @@ static inline pud_t *pud_alloc(struct mm_struct *mm, p4d_t *p4d,
 
 static inline pmd_t *pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)
 {
-	return (unlikely(pud_none(*pud)) && __pmd_alloc(mm, pud, address))?
-		NULL: pmd_offset(pud, address);
+	if (unlikely(pud_none(*pud)) && __pmd_alloc(mm, pud, address)){
+		//some kind of check that was here before
+		return NULL;
+	}
+	else{
+		//start return pmd_offset(pud, address); replacement
+		// Use helpers here to either use shim logic or not
+		if (pud_is_flattened(pud)){
+			//shim table!
+			return pmd_offset_flattened(pud, address);
+		}
+		else{
+			// normal operation
+			return pmd_offset(pud, address);
+		}
+		// End pmd_offset replacement
+	}
+
 }
 #endif /* CONFIG_MMU */
 
