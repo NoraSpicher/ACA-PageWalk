@@ -6829,14 +6829,17 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 
 	// Modified version to pull from later:
 	struct page *new_page;
-    
-    
+    // need to check if we are in kernel space or user space
+	if (mm == &init_mm) {
+		// Kernel stuff, skip large allocation 
+		goto fallback;
+	}
     //Allocate and immediately zero the full 2MB
     new_page = alloc_pages(GFP_KERNEL, 9);
     if (!new_page){
-	// if (true){
 		// Fallback path: 2 MB allocation failed. Try a smaller one. 
 		pr_info("ALLOC: Using fallback");
+		fallback:
 		pud_t *new = pud_alloc_one(mm, address);
 		if (!new){
 			return -ENOMEM;//for real this time 
@@ -6851,26 +6854,53 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 		spin_unlock(&mm->page_table_lock);
 		return 0;
 	}
+
+
 	// Large allocation path 
-
-	
-
-	//my current guess at what a large allocation without the shim table looks like. 
+	//now tryign to implement a real shim table.  
 	memset(page_address(new_page), 0, 2097152);
+
 	pud_t *new_pud = (pud_t *)page_address(new_page); //just to access it in p4d, set_bit
-	pagetable_pud_ctor(virt_to_ptdesc(new_pud)); //hopefully, calls constructor 	
-    
+
+	pagetable_pud_ctor(virt_to_ptdesc(new_pud)); //hopefully, calls constructor
+	
+	//struct page *page = virt_to_page(new_pud);
+	set_bit(PG_arch_1, &new_page->flags); //Set software flag to indicate flattening. Ideally would be hardware visible, but, stretch goal
+    // unsigned long base_pfn = page_to_pfn(new_page);
+	void *base = page_address(new_page); //Need this too for some reason?? 
+	//unsigned long *shim = page_address(new_page);
+	pud_t *shim = (pud_t *)page_address(new_page);
+
+	for (int i=0; i<511; i++){
+		//Build the pmd block, but skip the shim at the start
+		void *pmd_page = base + ((i + 1) * PAGE_SIZE);
+		// unsigned long pfn_i = base_pfn+i+1; // +1 skips first one. 
+		pagetable_pmd_ctor(virt_to_ptdesc(pmd_page)); // Construct new pmd here 
+		pud_populate(mm, &shim[i], pmd_page); // Probably this is better, populate the layer above correctly now hopefully
+		// set_pud(&shim[i], __pud((pfn_i << PAGE_SHIFT) |
+        //       _PAGE_PRESENT |
+        //       _PAGE_RW |
+        //       _PAGE_TABLE));
+	}
+	set_pud(&shim[511], __pud(0)); // Our 2 MB chunk doesn't have room for a shim and 512 pages. Silly. 
+
 	spin_lock(&mm->page_table_lock); //Probably can optimize what goes in the lock
 	if (!p4d_present(*p4d)) {
 		mm_inc_nr_puds(mm);
 		smp_wmb(); /* See comment in pmd_install() */
 		p4d_populate(mm, p4d, new_pud);
-		struct page *page = virt_to_page(new_pud);
-		set_bit(PG_arch_1, &page->flags); //Set software flag to indicate flattening. Ideally would be hardware visible, but, stretch goal
+		
 		
 	} else	/* Another has populated it */
 		__free_pages(new_page, 9); 
 	spin_unlock(&mm->page_table_lock);
+	pr_info("ALLOC FLAT: pud=%lx first=%lx\n",
+        __pa(new_pud),
+        ((unsigned long *)new_pud)[0]);
+	
+	pr_info("CHECK FLAT: pud=%lx flag=%d\n",
+        pud_val(*new_pud),
+        pud_is_flattened(new_pud));
 	return 0;
 
 	
@@ -6938,7 +6968,8 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
  * We've already handled the fast-path in-line.
  */
 int __pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)
-{
+{	
+	pr_info("Calling pmd_alloc, possibly an issue if flag is high: %d", pud_is_flattened(pud)); // Currently doesn't seem to be an issue.
 	if (address >= 0x700000000000UL &&
     		address <  0x700040000000UL) {
 	pr_info("flat_l3l2: ENTER __pmd_alloc for addr=0x%lx pud_val=0x%llx\n",
