@@ -1,5 +1,6 @@
 # ACA-PageWalk
-Repository for ECEN-5593 final project. Will implement page table flattening in the linux kernel. 
+Repository for ECEN-5593 final project. Changes structure of the Linux kernel page tables to more closely resemble a flattened structure.
+
 
 ## Setup
 You will need QEMU installed to use this repository. The repository now contains the linux kernel (with some changes). Originally, we got the kernel from here:
@@ -8,14 +9,7 @@ wget https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/snapshot
 tar -xzf linux-6.15.tar.gz
 ```
 ## Kernel Recompilation Steps
-Every time you modify the kernel (as well as initially when you unzip it), you will need to recompile with the following commands. From the `linux-6.15` directory: 
-
-```
-make defconfig 
-make kvm_guest.config
-make -j$(nproc)
-```
-For convenience, I added `compile.sh`, which runs all the necessary commands and should be ran from the main repo directory. 
+Every time you modify the kernel (as well as initially when you unzip it), you will need to recompile. For convenience, I added `compile.sh`, which runs all the necessary commands and should be ran from the main repo directory. 
 
 ## Use
 Just run the `run.sh` file to run the kernel with qemu (you will need qemu to be installed). I also added `gdbrun.sh` to link qemu to gdb. It only adds two tags, `-s` and `-S`. 
@@ -34,3 +28,6 @@ cp ./initramfs.cpio.gz ./../
 ```
 
 Technically, you should only need the zip file, but the file system isnt too big, so I included it here so that we don't have to rebuild it from scratch if we need to modify it.
+
+## Current Status
+Right now, the kernel doesn't work. Changes we made to flatten the structure aren't quite functional, and there seem to be errors with PUD allocation (and possibly PMD offset calculation). 
