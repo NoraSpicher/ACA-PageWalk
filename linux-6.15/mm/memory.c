@@ -6807,27 +6807,10 @@ int __p4d_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address)
  * Allocate page upper directory.
  * We've already handled the fast-path in-line.
  */
-// int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
-// {
-// 	pud_t *new = pud_alloc_one(mm, address);
-// 	if (!new)
-// 		return -ENOMEM;
 
-// 	spin_lock(&mm->page_table_lock);
-// 	if (!p4d_present(*p4d)) {
-// 		mm_inc_nr_puds(mm);
-// 		smp_wmb(); /* See comment in pmd_install() */
-// 		p4d_populate(mm, p4d, new);
-// 	} else	/* Another has populated it */
-// 		pud_free(mm, new);
-// 	spin_unlock(&mm->page_table_lock);
-// 	return 0;
-// }
 
 int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 {
-
-	// Modified version to pull from later:
 	struct page *new_page;
     // need to check if we are in kernel space or user space
 	if (mm == &init_mm) {
@@ -6839,7 +6822,7 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
     if (!new_page){
 		// Fallback path: 2 MB allocation failed. Try a smaller one. 
 		pr_info("ALLOC: Using fallback");
-		fallback:
+		fallback: // (or we are in kernel space)
 		pud_t *new = pud_alloc_one(mm, address);
 		if (!new){
 			return -ENOMEM;//for real this time 
@@ -6856,112 +6839,39 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 	}
 
 
-	// Large allocation path 
-	//now tryign to implement a real shim table.  
+	// Large allocation path  
 	memset(page_address(new_page), 0, 2097152);
-
-	pud_t *new_pud = (pud_t *)page_address(new_page); //just to access it in p4d, set_bit
-
-	pagetable_pud_ctor(virt_to_ptdesc(new_pud)); //hopefully, calls constructor
-	
-	//struct page *page = virt_to_page(new_pud);
+	pud_t *shim = (pud_t *)page_address(new_page); //just to access it in p4d, set_bit
+	pagetable_pud_ctor(virt_to_ptdesc(shim)); //hopefully, calls constructor
 	set_bit(PG_arch_1, &new_page->flags); //Set software flag to indicate flattening. Ideally would be hardware visible, but, stretch goal
-    // unsigned long base_pfn = page_to_pfn(new_page);
-	//void *base = page_address(new_page); //Need this too for some reason?? 
-	//unsigned long *shim = page_address(new_page);
-	pud_t *shim = (pud_t *)page_address(new_page);
+	
 	
 
 	for (int i=0; i<511; i++){
 		//Build the pmd block, but skip the shim at the start
-		// void *pmd_page = base + ((i + 1) * PAGE_SIZE); //seems like this was constructing wrong?
 		struct page *p = new_page + (i + 1);
 		void *pmd_page = page_address(p);
-		// unsigned long pfn_i = base_pfn+i+1; // +1 skips first one.
-		memset(pmd_page, 0, PAGE_SIZE); // 0 it out, having issues with leftover data I think 
 		pagetable_pmd_ctor(virt_to_ptdesc(pmd_page)); // Construct new pmd here 
-		pud_populate(mm, &shim[i], pmd_page); // Probably this is better, populate the layer above correctly now hopefully
-		// set_pud(&shim[i], __pud((pfn_i << PAGE_SHIFT) |
-        //       _PAGE_PRESENT |
-        //       _PAGE_RW |
-        //       _PAGE_TABLE));
+		pud_populate(mm, &shim[i], pmd_page); // Populate the shim with the correct flags
 	}
 	set_pud(&shim[511], __pud(0)); // Our 2 MB chunk doesn't have room for a shim and 512 pages. Silly. 
 
-	spin_lock(&mm->page_table_lock); //Probably can optimize what goes in the lock
+	spin_lock(&mm->page_table_lock); //Probably can optimize what goes in the lock eventually
 	if (!p4d_present(*p4d)) {
 		mm_inc_nr_puds(mm);
 		smp_wmb(); /* See comment in pmd_install() */
-		p4d_populate(mm, p4d, new_pud);
-		
-		
+		p4d_populate(mm, p4d, shim);		
 	} else	/* Another has populated it */
-		__free_pages(new_page, 9); 
+		__free_pages(new_page, 9); //need to free the whole block in this case
 	spin_unlock(&mm->page_table_lock);
 	pr_info("ALLOC FLAT: pud=%lx first=%lx\n",
-        __pa(new_pud),
-        ((unsigned long *)new_pud)[0]);
+        __pa(shim),
+        ((unsigned long *)shim)[0]);
 	
 	pr_info("CHECK FLAT: pud=%lx flag=%d\n",
-        pud_val(*new_pud),
-        pud_is_flattened(new_pud));
+        pud_val(*shim),
+        pud_is_flattened(shim));
 	return 0;
-
-	
-	
-	// Modified version to pull from later:
-	// struct page *new_page;
-    // pud_t *new;
-    
-    // //Allocate and immediately zero the full 2MB
-    // new_page = alloc_pages(GFP_KERNEL, 9);
-    // if (!new_page) return -ENOMEM;
-    // memset(page_address(new_page), 0, 2097152);
-
-    // //Split and initialize ONLY what is necessary
-    // split_page(new_page, 9);
-    
-    // for (int i = 0; i < 512; i++) {
-    //     struct page *p = new_page + i;
-        
-    //     //Clear everything that might trigger a 'Bad Page' panic
-    //     p->flags &= ~(1UL << PG_reserved);
-        
-    //     //misguided idea, just use the flag bits from before idiot 
-    //     if (i == 0) 
-    //         set_bit(13, &p->flags); 
-    //     else
-    //         clear_bit(13, &p->flags);
-            
-    //     // Needs to change, the pmd constructor shouldn't be used on the first slice, and we need the pud constructor isntead
-    //     pagetable_pmd_ctor(page_ptdesc(p));
-    // }
-
-    // //Shim table setup. Inspect closely 
-    // volatile unsigned long *shim_table = (unsigned long *)page_address(new_page);
-    // unsigned long pfn_base = page_to_pfn(new_page);
-
-    // for (int i = 0; i < 512; i++) {
-    //     unsigned long target_pfn = pfn_base + i + 1;
-    //     shim_table[i] = (target_pfn << PAGE_SHIFT) | _PAGE_TABLE | _PAGE_USER;
-    // }
-
-    // new = (pud_t *)page_address(new_page);  
-    
-    // // This is almost certainly evil 
-    // spin_lock(&mm->page_table_lock);
-    // if (!p4d_present(*p4d)) {
-    //     mm_inc_nr_puds(mm);
-    //     smp_wmb();
-    //     set_p4d(p4d, __p4d(__pa(new) | _PAGE_TABLE | _PAGE_USER));
-    // } else {
-    //     /* Cleanup path if another CPU won the race */
-    //     __free_pages(new_page, 9); 
-    // }
-    // spin_unlock(&mm->page_table_lock);
-    
-    // native_flush_tlb_global();
-    // return 0;
 }
 
 #endif /* __PAGETABLE_PUD_FOLDED */

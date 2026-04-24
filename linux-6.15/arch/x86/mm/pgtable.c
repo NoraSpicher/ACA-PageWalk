@@ -926,37 +926,19 @@ void arch_check_zapped_pud(struct vm_area_struct *vma, pud_t pud)
 //helper for shim logic 
 bool pud_is_flattened(pud_t *pud)
 {
-    // unsigned long phys = pud_val(*pud) & PHYSICAL_PUD_PAGE_MASK;
-    // struct page *page = pfn_to_page(phys >> PAGE_SHIFT);
 	struct page *page = virt_to_page((void *)pud);
-	
 	// This is just to detect a pud that acts as a shim table 
-    bool flattened = test_bit(PG_arch_1, &page->flags); //Should check our flag...
+    bool flattened = test_bit(PG_arch_1, &page->flags); // Tests PG_arch_bit, which we use to mark flat PUDs
 	//pr_info("FLAT: pud check ran, found %s, returning false.\n", flattened ? "true" : "false"); //This does print! 8 million times per second 
-	return flattened; // Now actually modifying pmd_offset...
+	return flattened; 
 }
 
 pmd_t *pmd_offset_flattened(pud_t *pud, unsigned long addr)
 {
-    // unsigned long phys = pud_val(*pud) & PHYSICAL_PUD_PAGE_MASK;
-    // unsigned long index = (addr >> 21) & 511;
+    unsigned long phys = pud_val(*pud) & PHYSICAL_PUD_PAGE_MASK;
+    unsigned long index = (addr >> 21) & 511; // Should find how many pages into our block the page is
 
-	// // This is where the shim offset calculation lives now
-	// void *base = __va(phys);
-    // return (pmd_t *)(base + PAGE_SIZE + index * PAGE_SIZE); //start of pud, past shim, n pages into pmd.
-
-	// trying something more direct, feels weird though
-	unsigned long pud_index = (addr >> 30) & 511;
-
-    Treat pud as base of shim
-    pud_t *table = (pud_t *)pud;
-
-    pud_t entry = READ_ONCE(table[pud_index]);
-
-    unsigned long phys = pud_val(entry) & PHYSICAL_PUD_PAGE_MASK;
-
-    pmd_t *pmd_base = (pmd_t *)__va(phys);
-
-    return &pmd_base[(addr >> 21) & 511];
-
+	// This is where the shim offset calculation lives now
+	void *base = __va(phys);
+    return (pmd_t *)(base + PAGE_SIZE + index * PAGE_SIZE); //start of pud, past shim, n pages into pmd.
 }
