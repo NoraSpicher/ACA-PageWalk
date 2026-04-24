@@ -2162,7 +2162,15 @@ static inline int unuse_pmd_range(struct vm_area_struct *vma, pud_t *pud,
 	unsigned long next;
 	int ret;
 
-	pmd = pmd_offset(pud, addr);
+	//pmd = pmd_offset(pud, addr);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, addr);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, addr);
+	}
 	do {
 		cond_resched();
 		next = pmd_addr_end(addr, end);

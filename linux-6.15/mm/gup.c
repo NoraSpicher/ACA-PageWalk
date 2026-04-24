@@ -957,7 +957,15 @@ static struct page *follow_pmd_mask(struct vm_area_struct *vma,
 	struct page *page;
 	struct mm_struct *mm = vma->vm_mm;
 
-	pmd = pmd_offset(pudp, address);
+	//pmd = pmd_offset(pudp, address);
+	if (pud_is_flattened(pudp)){
+		//shim table!
+		pmd = pmd_offset_flattened(pudp, address);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pudp, address);
+	}
 	pmdval = pmdp_get_lockless(pmd);
 	if (pmd_none(pmdval))
 		return no_page_table(vma, flags, address);
@@ -1118,7 +1126,15 @@ static int get_gate_page(struct mm_struct *mm, unsigned long address,
 	pud = pud_offset(p4d, address);
 	if (pud_none(*pud))
 		return -EFAULT;
-	pmd = pmd_offset(pud, address);
+	//pmd = pmd_offset(pud, address);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, address);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, address);
+	}
 	if (!pmd_present(*pmd))
 		return -EFAULT;
 	pte = pte_offset_map(pmd, address);

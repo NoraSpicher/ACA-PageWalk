@@ -151,7 +151,15 @@ static void ptwalk_single_one_addr(struct mm_struct *mm, unsigned long addr)
 	if (pud_leaf(*pud))
 		return;
 
-	pmd = pmd_offset(pud, addr);
+	//pmd = pmd_offset(pud, addr);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, addr);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, addr);
+	}
 	single_stats.pmd_count++;
 	if (pmd_none(*pmd) || !pmd_present(*pmd))
 		return;
@@ -265,7 +273,15 @@ static int walk_pmd_range(pud_t *pud, unsigned long addr, unsigned long end,
 	//summary_stats.pmd_count++;  // commented out temporarily for single walk measurement 
 
 
-	pmd = pmd_offset(pud, addr);
+	//pmd = pmd_offset(pud, addr);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, addr);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, addr);
+	}
 	do {
 again:
 		next = pmd_addr_end(addr, end);
@@ -1090,7 +1106,15 @@ struct folio *folio_walk_start(struct folio_walk *fw,
 
 pmd_table:
 	VM_WARN_ON_ONCE(!pud_present(pud) || pud_leaf(pud));
-	pmdp = pmd_offset(pudp, addr);
+	//pmdp = pmd_offset(pudp, addr);
+	if (pud_is_flattened(pudp)){
+		//shim table!
+		pmdp = pmd_offset_flattened(pudp, addr);
+	}
+	else{
+		// normal operation
+		pmdp = pmd_offset(pudp, addr);
+	}
 	pmd = pmdp_get_lockless(pmdp);
 	if (pmd_none(pmd))
 		goto not_found;

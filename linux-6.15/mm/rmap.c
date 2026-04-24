@@ -831,7 +831,15 @@ pmd_t *mm_find_pmd(struct mm_struct *mm, unsigned long address)
 	if (!pud_present(*pud))
 		goto out;
 
-	pmd = pmd_offset(pud, address);
+	//pmd = pmd_offset(pud, address);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, address);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, address);
+	}
 out:
 	return pmd;
 }

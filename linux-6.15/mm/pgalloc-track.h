@@ -39,7 +39,15 @@ static inline pmd_t *pmd_alloc_track(struct mm_struct *mm, pud_t *pud,
 		*mod_mask |= PGTBL_PUD_MODIFIED;
 	}
 
-	return pmd_offset(pud, address);
+	//return pmd_offset(pud, address);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		return pmd_offset_flattened(pud, address);
+	}
+	else{
+		// normal operation
+		return pmd_offset(pud, address);
+	}
 }
 #endif /* CONFIG_MMU */
 

@@ -238,7 +238,15 @@ restart:
 			continue;
 		}
 
-		pvmw->pmd = pmd_offset(pud, pvmw->address);
+		//pvmw->pmd = pmd_offset(pud, pvmw->address);
+		if (pud_is_flattened(pud)){
+			//shim table!
+			pvmw->pmd = pmd_offset_flattened(pud, pvmw->address);
+		}
+		else{
+			// normal operation
+			pvmw->pmd = pmd_offset(pud, pvmw->address);
+		}
 		/*
 		 * Make sure the pmd value isn't cached in a register by the
 		 * compiler and used as a stale value after we've observed a

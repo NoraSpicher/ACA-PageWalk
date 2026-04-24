@@ -3598,7 +3598,15 @@ static void walk_pmd_range_locked(pud_t *pud, unsigned long addr, struct vm_area
 		return;
 	}
 
-	pmd = pmd_offset(pud, *first);
+	//pmd = pmd_offset(pud, *first);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, *first);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, *first);
+	}
 
 	ptl = pmd_lockptr(args->mm, pmd);
 	if (!spin_trylock(ptl))
@@ -3677,7 +3685,15 @@ static void walk_pmd_range(pud_t *pud, unsigned long start, unsigned long end,
 	 * tables to avoid taking the PMD lock; the second, if necessary, takes
 	 * the PMD lock to clear the accessed bit in PMD entries.
 	 */
-	pmd = pmd_offset(pud, start & PUD_MASK);
+	//pmd = pmd_offset(pud, start & PUD_MASK);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, start & PUD_MASK);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, start & PUD_MASK);
+	}
 restart:
 	/* walk_pte_range() may call get_next_vma() */
 	vma = args->vma;

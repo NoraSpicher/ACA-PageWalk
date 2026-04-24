@@ -3149,7 +3149,15 @@ void __init __weak pcpu_populate_pte(unsigned long addr)
 		pud_populate(&init_mm, pud, pmd);
 	}
 
-	pmd = pmd_offset(pud, addr);
+	//pmd = pmd_offset(pud, addr);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, addr);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, addr);
+	}
 	if (!pmd_present(*pmd)) {
 		pte_t *new;
 

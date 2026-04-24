@@ -197,7 +197,16 @@ static void * __meminit vmemmap_alloc_block_zero(unsigned long size, int node)
 
 pmd_t * __meminit vmemmap_pmd_populate(pud_t *pud, unsigned long addr, int node)
 {
-	pmd_t *pmd = pmd_offset(pud, addr);
+	pmd_t *pmd; // = pmd_offset(pud, addr);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, addr);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, addr);
+	}
+
 	if (pmd_none(*pmd)) {
 		void *p = vmemmap_alloc_block_zero(PAGE_SIZE, node);
 		if (!p)
@@ -438,7 +447,15 @@ int __meminit vmemmap_populate_hugepages(unsigned long start, unsigned long end,
 		if (!pud)
 			return -ENOMEM;
 
-		pmd = pmd_offset(pud, addr);
+		//pmd = pmd_offset(pud, addr);
+		if (pud_is_flattened(pud)){
+			//shim table!
+			pmd = pmd_offset_flattened(pud, addr);
+		}
+		else{
+			// normal operation
+			pmd = pmd_offset(pud, addr);
+		}
 		if (pmd_none(READ_ONCE(*pmd))) {
 			void *p;
 

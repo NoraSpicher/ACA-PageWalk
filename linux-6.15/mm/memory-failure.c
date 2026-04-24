@@ -421,7 +421,15 @@ static unsigned long dev_pagemap_mapping_shift(struct vm_area_struct *vma,
 		return 0;
 	if (pud_trans_huge(*pud))
 		return PUD_SHIFT;
-	pmd = pmd_offset(pud, address);
+	//pmd = pmd_offset(pud, address);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, address);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, address);
+	}
 	if (!pmd_present(*pmd))
 		return 0;
 	if (pmd_trans_huge(*pmd))

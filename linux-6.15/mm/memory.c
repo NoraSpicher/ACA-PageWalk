@@ -6867,14 +6867,18 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 	//struct page *page = virt_to_page(new_pud);
 	set_bit(PG_arch_1, &new_page->flags); //Set software flag to indicate flattening. Ideally would be hardware visible, but, stretch goal
     // unsigned long base_pfn = page_to_pfn(new_page);
-	void *base = page_address(new_page); //Need this too for some reason?? 
+	//void *base = page_address(new_page); //Need this too for some reason?? 
 	//unsigned long *shim = page_address(new_page);
 	pud_t *shim = (pud_t *)page_address(new_page);
+	
 
 	for (int i=0; i<511; i++){
 		//Build the pmd block, but skip the shim at the start
-		void *pmd_page = base + ((i + 1) * PAGE_SIZE);
-		// unsigned long pfn_i = base_pfn+i+1; // +1 skips first one. 
+		// void *pmd_page = base + ((i + 1) * PAGE_SIZE); //seems like this was constructing wrong?
+		struct page *p = new_page + (i + 1);
+		void *pmd_page = page_address(p);
+		// unsigned long pfn_i = base_pfn+i+1; // +1 skips first one.
+		memset(pmd_page, 0, PAGE_SIZE); // 0 it out, having issues with leftover data I think 
 		pagetable_pmd_ctor(virt_to_ptdesc(pmd_page)); // Construct new pmd here 
 		pud_populate(mm, &shim[i], pmd_page); // Probably this is better, populate the layer above correctly now hopefully
 		// set_pud(&shim[i], __pud((pfn_i << PAGE_SHIFT) |

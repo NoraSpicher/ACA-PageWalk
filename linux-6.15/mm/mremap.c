@@ -101,7 +101,15 @@ static pmd_t *get_old_pmd(struct mm_struct *mm, unsigned long addr)
 	if (!pud)
 		return NULL;
 
-	pmd = pmd_offset(pud, addr);
+	//pmd = pmd_offset(pud, addr);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, addr);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, addr);
+	}
 	if (pmd_none(*pmd))
 		return NULL;
 

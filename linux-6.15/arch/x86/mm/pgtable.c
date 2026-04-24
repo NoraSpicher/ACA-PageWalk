@@ -938,10 +938,25 @@ bool pud_is_flattened(pud_t *pud)
 
 pmd_t *pmd_offset_flattened(pud_t *pud, unsigned long addr)
 {
-    unsigned long phys = pud_val(*pud) & PHYSICAL_PUD_PAGE_MASK;
-    unsigned long index = (addr >> 21) & 511;
+    // unsigned long phys = pud_val(*pud) & PHYSICAL_PUD_PAGE_MASK;
+    // unsigned long index = (addr >> 21) & 511;
 
-	// This is where the shim offset calculation lives now
-	void *base = __va(phys);
-    return (pmd_t *)(base + PAGE_SIZE + index * PAGE_SIZE); //start of pud, past shim, n pages into pmd.
+	// // This is where the shim offset calculation lives now
+	// void *base = __va(phys);
+    // return (pmd_t *)(base + PAGE_SIZE + index * PAGE_SIZE); //start of pud, past shim, n pages into pmd.
+
+	// trying something more direct, feels weird though
+	unsigned long pud_index = (addr >> 30) & 511;
+
+    Treat pud as base of shim
+    pud_t *table = (pud_t *)pud;
+
+    pud_t entry = READ_ONCE(table[pud_index]);
+
+    unsigned long phys = pud_val(entry) & PHYSICAL_PUD_PAGE_MASK;
+
+    pmd_t *pmd_base = (pmd_t *)__va(phys);
+
+    return &pmd_base[(addr >> 21) & 511];
+
 }

@@ -366,7 +366,15 @@ static void vunmap_pmd_range(pud_t *pud, unsigned long addr, unsigned long end,
 	unsigned long next;
 	int cleared;
 
-	pmd = pmd_offset(pud, addr);
+	//pmd = pmd_offset(pud, addr);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, addr);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, addr);
+	}
 	do {
 		next = pmd_addr_end(addr, end);
 
@@ -775,7 +783,15 @@ struct page *vmalloc_to_page(const void *vmalloc_addr)
 	if (WARN_ON_ONCE(pud_bad(*pud)))
 		return NULL;
 
-	pmd = pmd_offset(pud, addr);
+	//pmd = pmd_offset(pud, addr);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, addr);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, addr);
+	}
 	if (pmd_none(*pmd))
 		return NULL;
 	if (pmd_leaf(*pmd))

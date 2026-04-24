@@ -359,7 +359,15 @@ static inline long change_pmd_range(struct mmu_gather *tlb,
 	long pages = 0;
 	unsigned long nr_huge_updates = 0;
 
-	pmd = pmd_offset(pud, addr);
+	//pmd = pmd_offset(pud, addr);
+	if (pud_is_flattened(pud)){
+		//shim table!
+		pmd = pmd_offset_flattened(pud, addr);
+	}
+	else{
+		// normal operation
+		pmd = pmd_offset(pud, addr);
+	}
 	do {
 		long ret;
 		pmd_t _pmd;
